@@ -8,69 +8,7 @@ importers:
 
   .: {}
 
-  packages/bridge-store:
-    dependencies:
-      ws:
-        specifier: ^8.18.3
-        version: 8.19.0
-      zod:
-        specifier: ^3.25.76
-        version: 3.25.76
-      zod-to-json-schema:
-        specifier: ^3.25.1
-        version: 3.25.1(zod@3.25.76)
-      zustand:
-        specifier: ^4.5.5
-        version: 4.5.7(@types/react@19.2.14)(react@19.2.4)
-    devDependencies:
-      '@types/node':
-        specifier: ^22.13.5
-        version: 22.19.11
-      '@types/ws':
-        specifier: ^8.5.14
-        version: 8.18.1
-      '@vitest/coverage-v8':
-        specifier: ^4.0.18
-        version: 4.0.18(vitest@4.0.18(@types/node@22.19.11)(jiti@1.21.7)(tsx@4.21.0))
-      concurrently:
-        specifier: ^9.2.1
-        version: 9.2.1
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.1.2
-      tsx:
-        specifier: ^4.19.2
-        version: 4.21.0
-      typescript:
-        specifier: ^5.8.2
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.18
-        version: 4.0.18(@types/node@22.19.11)(jiti@1.21.7)(tsx@4.21.0)
-
-  packages/bridge-store/examples/browser-demo:
-    dependencies:
-      bridge-store:
-        specifier: workspace:*
-        version: link:../..
-      zustand:
-        specifier: ^4.5.5
-        version: 4.5.7(@types/react@19.2.14)(react@19.2.4)
-    devDependencies:
-      typescript:
-        specifier: ^5.8.2
-        version: 5.9.3
-      vite:
-        specifier: ^6.1.0
-        version: 6.4.1(@types/node@22.19.11)(jiti@1.21.7)(tsx@4.21.0)
-
-  packages/bridge-store/examples/node-demo:
-    dependencies:
-      ws:
-        specifier: ^8.18.3
-        version: 8.19.0
-
-  packages/storebridge-cli:
+  packages/agentstage-cli:
     dependencies:
       commander:
         specifier: ^14.0.1
@@ -98,7 +36,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@22.19.11)(jiti@1.21.7)(tsx@4.21.0)
 
-  packages/storebridge-runtime:
+  packages/agentstage-runtime:
     dependencies:
       '@radix-ui/react-slot':
         specifier: ^1.2.3
@@ -161,6 +99,68 @@ importers:
       vite:
         specifier: ^6.4.1
         version: 6.4.1(@types/node@22.19.11)(jiti@1.21.7)(tsx@4.21.0)
+
+  packages/bridge-store:
+    dependencies:
+      ws:
+        specifier: ^8.18.3
+        version: 8.19.0
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+      zod-to-json-schema:
+        specifier: ^3.25.1
+        version: 3.25.1(zod@3.25.76)
+      zustand:
+        specifier: ^4.5.5
+        version: 4.5.7(@types/react@19.2.14)(react@19.2.4)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.13.5
+        version: 22.19.11
+      '@types/ws':
+        specifier: ^8.5.14
+        version: 8.18.1
+      '@vitest/coverage-v8':
+        specifier: ^4.0.18
+        version: 4.0.18(vitest@4.0.18(@types/node@22.19.11)(jiti@1.21.7)(tsx@4.21.0))
+      concurrently:
+        specifier: ^9.2.1
+        version: 9.2.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.2
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@22.19.11)(jiti@1.21.7)(tsx@4.21.0)
+
+  packages/bridge-store/examples/browser-demo:
+    dependencies:
+      bridge-store:
+        specifier: workspace:*
+        version: link:../..
+      zustand:
+        specifier: ^4.5.5
+        version: 4.5.7(@types/react@19.2.14)(react@19.2.4)
+    devDependencies:
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+      vite:
+        specifier: ^6.1.0
+        version: 6.4.1(@types/node@22.19.11)(jiti@1.21.7)(tsx@4.21.0)
+
+  packages/bridge-store/examples/node-demo:
+    dependencies:
+      ws:
+        specifier: ^8.18.3
+        version: 8.19.0
 
 packages:
 

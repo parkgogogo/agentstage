@@ -9,7 +9,7 @@ import { pageTsxTemplate, metaJsonTemplate } from './templates.js'
 
 const program = new Command()
 
-program.name('storebridge').description('StoreBridge runtime CLI (MVP)')
+program.name('agentstage').description('Agentstage CLI (runtime + StoreBridge) (MVP)')
 
 program
   .command('start')

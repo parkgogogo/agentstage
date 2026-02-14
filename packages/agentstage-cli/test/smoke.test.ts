@@ -7,7 +7,7 @@ import fs from 'node:fs/promises'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const cliDir = path.resolve(here, '..')
 
-describe('storebridge-cli', () => {
+describe('agentstage-cli', () => {
   it('page:new creates files', async () => {
     const pageId = `test-page-${Date.now()}`
 

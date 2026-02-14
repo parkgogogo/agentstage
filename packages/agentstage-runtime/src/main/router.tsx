@@ -24,7 +24,7 @@ const indexRoute = createRoute({
   component: function Index() {
     return (
       <div className="p-6 space-y-2">
-        <h1 className="text-2xl font-semibold">StoreBridge Runtime</h1>
+        <h1 className="text-2xl font-semibold">Agentstage Runtime</h1>
         <p className="text-sm text-muted-foreground">Open /p/&lt;pageId&gt;</p>
       </div>
     )

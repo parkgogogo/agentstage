@@ -8,7 +8,7 @@ export function workspaceRootFromHere(metaUrl: string) {
 }
 
 export function runtimeDir(agentstageRoot: string) {
-  return path.join(agentstageRoot, 'packages', 'storebridge-runtime')
+  return path.join(agentstageRoot, 'packages', 'agentstage-runtime')
 }
 
 export function runtimePagesDir(agentstageRoot: string) {
