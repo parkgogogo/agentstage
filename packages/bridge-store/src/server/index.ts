@@ -1,7 +1,8 @@
 import { WebSocketServer } from "ws";
 import type WebSocket from "ws";
 import type { IncomingMessage } from "http";
-import { isObject, parseJsonRpcMessage, jsonRpcError, type JsonRpcId } from "../shared/protocol.js";
+import { isObject, parseJsonRpcMessage, type JsonRpcId } from "../shared/protocol.js";
+import { SemanticError, semanticError } from "../shared/errors.js";
 import { BridgeRegistry } from "./registry.js";
 import { handleNotification, handleRequest, handleResponse } from "./handlers.js";
 
@@ -61,8 +62,12 @@ export function startBridgeServer(opts: BridgeServerOptions = {}) {
 
         throw new Error("Unsupported JSON-RPC message");
       } catch (err) {
+        if (err instanceof SemanticError) {
+          send(ws, err.toJsonRpc(id));
+          return;
+        }
         const message = err instanceof Error ? err.message : String(err);
-        send(ws, jsonRpcError(id, -32600, message));
+        send(ws, semanticError('INVALID_REQUEST', message).toJsonRpc(id));
       }
     });
 

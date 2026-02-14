@@ -6,6 +6,7 @@ import {
   type JsonRpcSuccess,
   type JsonRpcFailure,
 } from "../shared/protocol.js";
+import { SemanticError, semanticError } from "../shared/errors.js";
 
 export type RpcHandler = (req: JsonRpcRequest) => Promise<unknown> | unknown;
 
@@ -98,8 +99,12 @@ export class WsRpcTransport {
         const result = await handler(msg as JsonRpcRequest);
         this.ws.send(JSON.stringify(jsonRpcResult(msg.id, result)));
       } catch (err) {
+        if (err instanceof SemanticError) {
+          this.ws.send(JSON.stringify(err.toJsonRpc(msg.id)));
+          return;
+        }
         const message = err instanceof Error ? err.message : String(err);
-        this.ws.send(JSON.stringify(jsonRpcError(msg.id, -32000, message)));
+        this.ws.send(JSON.stringify(semanticError('INTERNAL_ERROR', message).toJsonRpc(msg.id)));
       }
     }
 

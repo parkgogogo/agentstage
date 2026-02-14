@@ -4,6 +4,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 
 import type { PageId, StageAction, StageMeta, StoreId, StoreKey } from "../shared/types.js";
 import { attachZustandBridge } from "./zustand.js";
+import { semanticError } from "../shared/errors.js";
 
 export type ZodActionDef = {
   type: string;
@@ -75,8 +76,9 @@ export async function createBridgeStore<TState>(opts: BridgeStoreOptions<TState>
     ? (state: unknown) => {
         const r = stateSchema.safeParse(state);
         if (!r.success) {
-          // throw to become JSON-RPC error
-          throw new Error(`Invalid state: ${r.error.issues[0]?.message ?? "zod"}`);
+          throw semanticError('INVALID_STATE', 'Invalid state', {
+            issues: r.error.issues,
+          });
         }
       }
     : undefined;
@@ -87,7 +89,10 @@ export async function createBridgeStore<TState>(opts: BridgeStoreOptions<TState>
     if (!sch) return; // unknown allowed for now (MVP)
     const r = sch.safeParse(action.payload ?? {});
     if (!r.success) {
-      throw new Error(`Invalid action payload: ${r.error.issues[0]?.message ?? "zod"}`);
+      throw semanticError('INVALID_ACTION_PAYLOAD', 'Invalid action payload', {
+        actionType: action.type,
+        issues: r.error.issues,
+      });
     }
   };
 

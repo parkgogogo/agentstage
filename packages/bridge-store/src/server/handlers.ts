@@ -6,6 +6,7 @@ import {
   type JsonRpcId,
   type JsonRpcRequest,
 } from "../shared/protocol.js";
+import { SemanticError, semanticError } from "../shared/errors.js";
 import type { PageId, StageMeta, StoreId, StoreKey } from "../shared/types.js";
 import { BridgeRegistry } from "./registry.js";
 
@@ -14,7 +15,7 @@ function send(ws: WebSocket, msg: unknown) {
 }
 
 function requireParams<T extends Record<string, unknown>>(params: unknown): T {
-  if (!isObject(params)) throw new Error("Invalid params");
+  if (!isObject(params)) throw semanticError('INVALID_PARAMS', 'Invalid params');
   return params as T;
 }
 
@@ -42,7 +43,7 @@ export function handleNotification(reg: BridgeRegistry, ws: WebSocket, method: s
       version?: number;
     }>(params);
     const storeId = p.storeId;
-    if (!storeId || typeof storeId !== "string") throw new Error("storeId required");
+    if (!storeId || typeof storeId !== "string") throw semanticError('INVALID_PARAMS', 'storeId required');
 
     const meta = (p.meta ?? null) as StageMeta | null;
     const pageId: PageId = (p.pageId ?? meta?.id ?? "page") as string;
@@ -67,8 +68,8 @@ export function handleNotification(reg: BridgeRegistry, ws: WebSocket, method: s
     const p = requireParams<{ storeId: string; state: unknown; version?: number; source?: string }>(params);
     const storeId = p.storeId;
     const host = reg.getHost(storeId);
-    if (!host) throw new Error("Unknown storeId");
-    if (host.ws !== ws) throw new Error("Not store host");
+    if (!host) throw semanticError('UNKNOWN_STORE_ID', 'Unknown storeId', { storeId });
+    if (host.ws !== ws) throw semanticError('NOT_STORE_HOST', 'Not store host', { storeId });
 
     host.state = p.state;
     host.version = typeof p.version === "number" ? p.version : host.version + 1;
@@ -108,7 +109,7 @@ export function handleRequest(reg: BridgeRegistry, ws: WebSocket, req: JsonRpcRe
     if (method === "store.getMeta") {
       const p = requireParams<{ storeId: string }>(req.params);
       const host = reg.getHost(p.storeId);
-      if (!host) throw new Error("Store offline");
+      if (!host) throw semanticError('STORE_OFFLINE', 'Store offline', { storeId: p.storeId });
       send(ws, jsonRpcResult(id, { meta: host.meta }));
       return;
     }
@@ -116,7 +117,7 @@ export function handleRequest(reg: BridgeRegistry, ws: WebSocket, req: JsonRpcRe
     if (method === "store.getState") {
       const p = requireParams<{ storeId: string }>(req.params);
       const host = reg.getHost(p.storeId);
-      if (!host) throw new Error("Store offline");
+      if (!host) throw semanticError('STORE_OFFLINE', 'Store offline', { storeId: p.storeId });
       send(ws, jsonRpcResult(id, { state: host.state, version: host.version }));
       return;
     }
@@ -177,7 +178,7 @@ export function handleRequest(reg: BridgeRegistry, ws: WebSocket, req: JsonRpcRe
       const map = reg.pageToStoreKeys.get(p.pageId);
       const storeId = map?.get(p.storeKey as any);
       if (!storeId) {
-        send(ws, jsonRpcError(id, 404, "Store not found", { pageId: p.pageId, storeKey: p.storeKey }));
+        send(ws, semanticError('STORE_NOT_FOUND', 'Store not found', { pageId: p.pageId, storeKey: p.storeKey }).toJsonRpc(id));
         return;
       }
       send(ws, jsonRpcResult(id, { storeId }));
@@ -187,10 +188,10 @@ export function handleRequest(reg: BridgeRegistry, ws: WebSocket, req: JsonRpcRe
     if (method === "store.setState") {
       const p = requireParams<{ storeId: string; state: unknown; expectedVersion?: number; source?: string }>(req.params);
       const host = reg.getHost(p.storeId);
-      if (!host) throw new Error("Store offline");
+      if (!host) throw semanticError('STORE_OFFLINE', 'Store offline', { storeId: p.storeId });
 
       if (typeof p.expectedVersion === "number" && p.expectedVersion !== host.version) {
-        send(ws, jsonRpcError(id, 409, "Version conflict", { currentVersion: host.version }));
+        send(ws, semanticError('VERSION_CONFLICT', 'Version conflict', { storeId: p.storeId, currentVersion: host.version, expectedVersion: p.expectedVersion }).toJsonRpc(id));
         return;
       }
 
@@ -209,10 +210,10 @@ export function handleRequest(reg: BridgeRegistry, ws: WebSocket, req: JsonRpcRe
     if (method === "store.dispatch") {
       const p = requireParams<{ storeId: string; action: unknown; expectedVersion?: number; source?: string }>(req.params);
       const host = reg.getHost(p.storeId);
-      if (!host) throw new Error("Store offline");
+      if (!host) throw semanticError('STORE_OFFLINE', 'Store offline', { storeId: p.storeId });
 
       if (typeof p.expectedVersion === "number" && p.expectedVersion !== host.version) {
-        send(ws, jsonRpcError(id, 409, "Version conflict", { currentVersion: host.version }));
+        send(ws, semanticError('VERSION_CONFLICT', 'Version conflict', { storeId: p.storeId, currentVersion: host.version, expectedVersion: p.expectedVersion }).toJsonRpc(id));
         return;
       }
 
@@ -228,9 +229,13 @@ export function handleRequest(reg: BridgeRegistry, ws: WebSocket, req: JsonRpcRe
       return;
     }
 
-    send(ws, jsonRpcError(id, -32601, `Method not found: ${method}`));
+    send(ws, semanticError('METHOD_NOT_FOUND', `Method not found: ${method}`).toJsonRpc(id));
   } catch (err) {
+    if (err instanceof SemanticError) {
+      send(ws, err.toJsonRpc(id));
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
-    send(ws, jsonRpcError(id, -32000, message));
+    send(ws, semanticError('INTERNAL_ERROR', message).toJsonRpc(id));
   }
 }

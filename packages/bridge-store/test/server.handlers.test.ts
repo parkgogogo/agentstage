@@ -70,6 +70,23 @@ describe('server handlers', () => {
     expect(lastSent(clientWs)).toEqual({ jsonrpc: '2.0', id: 1, result: { storeId: 'p1#aaa' } })
   })
 
+  it('store.getState on offline store returns semantic error kind', () => {
+    const reg = new BridgeRegistry()
+    const clientWs = new MockWs() as any
+
+    handleRequest(reg, clientWs, req(1, 'store.getState', { storeId: 'missing' }) as any)
+
+    expect(lastSent(clientWs)).toMatchObject({
+      jsonrpc: '2.0',
+      id: 1,
+      error: {
+        code: -32010,
+        message: 'Store offline',
+        data: { kind: 'STORE_OFFLINE', storeId: 'missing' },
+      },
+    })
+  })
+
   it('store.setState forwards to host as client.setState and returns response after handleResponse', () => {
     const reg = new BridgeRegistry()
     const hostWs = new MockWs() as any
