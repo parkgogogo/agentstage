@@ -31,12 +31,14 @@ ws.on('message', (data) => {
 ws.on('open', async () => {
   console.log('connected')
 
-  await request('store.subscribe', { storeId: 'demo:counter' })
-  const cur = await request('store.getState', { storeId: 'demo:counter' }).catch((e) => ({ error: e }))
+  const storeId = process.env.STORE_ID || 'demo:counter'
+
+  await request('store.subscribe', { storeId })
+  const cur = await request('store.getState', { storeId }).catch((e) => ({ error: e }))
   console.log('getState:', cur)
 
-  console.log('dispatch counter.add {n: 5}')
-  const r = await request('store.dispatch', { storeId: 'demo:counter', action: { type: 'counter.add', payload: { n: 5 } } })
+  console.log('dispatch counter.add {n: 5} to', storeId)
+  const r = await request('store.dispatch', { storeId, action: { type: 'counter.add', payload: { n: 5 } } }).catch((e) => ({ error: e }))
   console.log('dispatch result:', r)
 
   setTimeout(() => process.exit(0), 3000)

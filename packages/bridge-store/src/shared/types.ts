@@ -7,8 +7,8 @@ export type StageMeta = {
   store?: {
     version?: number;
     stateSchema?: unknown;
-    actions?: Array<{ type: string; payloadSchema?: unknown; danger?: boolean; confirmText?: string }>;
-    events?: Array<{ type: string; payloadSchema?: unknown }>;
+    actions?: Array<{ type: string; description?: string; payloadSchema?: unknown; danger?: boolean; confirmText?: string }>;
+    events?: Array<{ type: string; description?: string; payloadSchema?: unknown }>;
   };
   [k: string]: unknown;
 };
