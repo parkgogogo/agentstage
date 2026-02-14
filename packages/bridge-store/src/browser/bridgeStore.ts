@@ -3,7 +3,7 @@ import type { ZodTypeAny } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 import type { PageId, StageAction, StageMeta, StoreId, StoreKey } from "../shared/types.js";
-import { attachZustandHost } from "./zustand.js";
+import { attachStoreBridgeBrowser } from "./zustand.js";
 import { semanticError } from "../shared/errors.js";
 
 export type ZodActionDef = {
@@ -20,7 +20,7 @@ export type ZodEventDef = {
   payloadSchema?: ZodTypeAny;
 };
 
-export type BridgeStoreOptions<TState> = {
+export type StoreBridgeBrowserOptions<TState> = {
   bridgeUrl: string;
 
   // Semantic grouping for multiple stores under a page.
@@ -57,7 +57,7 @@ function toJsonSchema(schema: ZodTypeAny): unknown {
   return (out as any).schema ?? out;
 }
 
-export async function createBridgeStore<TState>(opts: BridgeStoreOptions<TState>): Promise<{
+export async function createStoreBridgeBrowser<TState>(opts: StoreBridgeBrowserOptions<TState>): Promise<{
   store: StoreApi<TState>;
   storeId: StoreId;
   close: () => void;
@@ -118,7 +118,7 @@ export async function createBridgeStore<TState>(opts: BridgeStoreOptions<TState>
 
   const pageId: PageId = (opts.pageId ?? (wireMeta.id ?? "page")) as string;
 
-  const attached = await attachZustandHost({
+  const attached = await attachStoreBridgeBrowser({
     bridgeUrl: opts.bridgeUrl,
     pageId,
     storeKey: opts.storeKey,

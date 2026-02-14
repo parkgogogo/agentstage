@@ -1,4 +1,4 @@
-import { createBridgeStore } from 'bridge-store/client'
+import { createStoreBridgeBrowser } from 'bridge-store/browser'
 import { z } from 'zod'
 
 type State = {
@@ -7,7 +7,7 @@ type State = {
   dispatch: (action: { type: string; payload?: any }) => void
 }
 
-const { store, storeId } = await createBridgeStore<State>({
+const { store, storeId } = await createStoreBridgeBrowser<State>({
   bridgeUrl: 'ws://127.0.0.1:8787',
   pageId: 'demo:counter',
   storeKey: 'main',

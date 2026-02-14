@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import { createBridgeStore } from '../src/browser/bridgeStore.js'
+import { createStoreBridgeBrowser } from '../src/browser/bridgeStore.js'
 
-// We stub attachZustandHost so this test stays unit-level.
+// We stub attachStoreBridgeBrowser so this test stays unit-level.
 vi.mock('../src/browser/zustand.js', async () => {
   return {
-    attachZustandHost: vi.fn(async (opts: any) => {
+    attachStoreBridgeBrowser: vi.fn(async (opts: any) => {
       return {
         pageId: opts.pageId,
         storeKey: opts.storeKey,
@@ -18,13 +18,13 @@ vi.mock('../src/browser/zustand.js', async () => {
   }
 })
 
-const { attachZustandHost } = await import('../src/browser/zustand.js')
+const { attachStoreBridgeBrowser } = await import('../src/browser/zustand.js')
 
 describe('createBridgeStore', () => {
   it('converts zod schemas to JSON schema and passes pageId/storeKey to attach', async () => {
     const stateSchema = z.object({ count: z.number().describe('Counter value') })
 
-    const res = await createBridgeStore({
+    const res = await createStoreBridgeBrowser({
       bridgeUrl: 'ws://127.0.0.1:8787',
       pageId: 'demo:counter',
       storeKey: 'main',
@@ -52,7 +52,7 @@ describe('createBridgeStore', () => {
 
     expect(res.storeId).toContain('demo:counter#')
 
-    const call = (attachZustandHost as any).mock.calls.at(-1)?.[0]
+    const call = (attachStoreBridgeBrowser as any).mock.calls.at(-1)?.[0]
     expect(call.pageId).toBe('demo:counter')
     expect(call.storeKey).toBe('main')
 

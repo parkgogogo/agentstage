@@ -3,20 +3,17 @@ import type { PageId, StageAction, StageMeta, StoreId, StoreKey } from "../share
 import type { JsonRpcRequest } from "../shared/protocol.js";
 import { WsRpcTransport } from "./transport.js";
 
-export type StoreHostOptions<TState> = {
+export type StoreBridgeBrowserAttachOptions<TState> = {
   bridgeUrl: string;
   pageId?: PageId;
   storeKey?: StoreKey;
   storeId?: StoreId;
   meta: StageMeta;
   store: StoreApi<TState>;
-  sourceName?: string; // e.g. "browser"
+  sourceName?: string; // e.g. "storebridge-browser"
   validateState?: (state: unknown) => void;
   validateAction?: (action: StageAction) => void;
 };
-
-/** @deprecated Use StoreHostOptions */
-export type BridgeClientOptions<TState> = StoreHostOptions<TState>;
 
 // Attaches a zustand store to the bridge server.
 // - Registers storeId + meta + initial state
@@ -36,14 +33,14 @@ function defaultStoreId(pageId: PageId): StoreId {
   return `${pageId}#${randomId().slice(0, 8)}`;
 }
 
-export async function attachZustandHost<TState>(opts: StoreHostOptions<TState>) {
+export async function attachStoreBridgeBrowser<TState>(opts: StoreBridgeBrowserAttachOptions<TState>) {
   const { bridgeUrl, meta, store } = opts;
   const pageId = opts.pageId ?? defaultPageId(meta);
   const storeId = opts.storeId ?? defaultStoreId(pageId);
   const storeKey = opts.storeKey;
   const validateState = opts.validateState;
   const validateAction = opts.validateAction;
-  const sourceName = opts.sourceName ?? "browser";
+  const sourceName = opts.sourceName ?? "storebridge-browser";
 
   let version = 0;
 
@@ -95,5 +92,4 @@ export async function attachZustandHost<TState>(opts: StoreHostOptions<TState>) 
   };
 }
 
-/** @deprecated Use attachZustandHost */
-export const attachZustandBridge = attachZustandHost;
+// (no deprecated aliases)

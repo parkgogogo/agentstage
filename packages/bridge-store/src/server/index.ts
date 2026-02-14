@@ -6,7 +6,7 @@ import { SemanticError, semanticError } from "../shared/errors.js";
 import { BridgeRegistry } from "./registry.js";
 import { handleNotification, handleRequest, handleResponse } from "./handlers.js";
 
-export type BridgeServerOptions = {
+export type StoreBridgeServerOptions = {
   port?: number;
   host?: string;
   token?: string;
@@ -16,7 +16,7 @@ function send(ws: WebSocket, msg: unknown) {
   ws.send(JSON.stringify(msg));
 }
 
-export function startBridgeServer(opts: BridgeServerOptions = {}) {
+export function startStoreBridgeServer(opts: StoreBridgeServerOptions = {}) {
   const port = opts.port ?? 8787;
   const host = opts.host ?? "127.0.0.1";
   const token = opts.token;
@@ -82,7 +82,7 @@ export function startBridgeServer(opts: BridgeServerOptions = {}) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const port = process.env.BRIDGE_STORE_PORT ? Number(process.env.BRIDGE_STORE_PORT) : 8787;
   const token = process.env.BRIDGE_STORE_TOKEN;
-  const server = startBridgeServer({ port, token });
+  const server = startStoreBridgeServer({ port, token });
   // eslint-disable-next-line no-console
   console.log(`bridge-store server ws://${server.host}:${server.port}${token ? "?token=***" : ""}`);
 }
