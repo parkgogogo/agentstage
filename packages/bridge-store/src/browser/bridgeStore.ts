@@ -57,11 +57,14 @@ function toJsonSchema(schema: ZodTypeAny): unknown {
   return (out as any).schema ?? out;
 }
 
-export async function createStoreBridgeBrowser<TState>(opts: StoreBridgeBrowserOptions<TState>): Promise<{
+// Create the zustand store synchronously, and expose an async attach() to connect to the bridge server.
+// This avoids top-level await in apps while keeping a single source of truth for:
+// - Zod -> JSON Schema conversion
+// - state/action validation
+export function createStoreBridgeBrowserSync<TState>(opts: StoreBridgeBrowserOptions<TState>): {
   store: StoreApi<TState>;
-  storeId: StoreId;
-  close: () => void;
-}> {
+  attach: () => ReturnType<typeof attachStoreBridgeBrowser>;
+} {
   const store = createStore<TState>(opts.createState);
 
   const stateSchema = opts.meta.store?.stateSchema;
@@ -118,21 +121,31 @@ export async function createStoreBridgeBrowser<TState>(opts: StoreBridgeBrowserO
 
   const pageId: PageId = (opts.pageId ?? (wireMeta.id ?? "page")) as string;
 
-  const attached = await attachStoreBridgeBrowser({
-    bridgeUrl: opts.bridgeUrl,
-    pageId,
-    storeKey: opts.storeKey,
-    storeId: opts.storeId,
-    meta: wireMeta,
-    store,
-    sourceName: opts.sourceName,
-    validateState,
-    validateAction,
-  });
-
   return {
     store,
-    storeId: attached.storeId,
-    close: attached.close,
+    attach: () =>
+      attachStoreBridgeBrowser({
+        bridgeUrl: opts.bridgeUrl,
+        pageId,
+        storeKey: opts.storeKey,
+        storeId: opts.storeId,
+        meta: wireMeta,
+        store,
+        sourceName: opts.sourceName,
+        validateState,
+        validateAction,
+      }),
   };
+}
+
+export async function createStoreBridgeBrowser<TState>(
+  opts: StoreBridgeBrowserOptions<TState>,
+): Promise<{
+  store: StoreApi<TState>;
+  storeId: StoreId;
+  close: () => void;
+}> {
+  const created = createStoreBridgeBrowserSync(opts);
+  const attached = await created.attach();
+  return { store: created.store, storeId: attached.storeId, close: attached.close };
 }

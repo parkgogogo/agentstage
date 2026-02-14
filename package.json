@@ -4,7 +4,7 @@
   "packageManager": "pnpm@9.15.4",
   "type": "module",
   "scripts": {
-    "dev": "pnpm -r dev",
+    "dev": "pnpm -C packages/agentstage-cli dev:start",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck"
   }

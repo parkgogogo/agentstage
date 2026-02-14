@@ -2,11 +2,11 @@ export function pageTsxTemplate(params: { pageId: string; title: string }) {
   const { pageId, title } = params
 
   return `import React from 'react'
-import { useStore } from 'zustand'
-import { z } from 'zod'
+	import { useStore } from 'zustand'
+	import { z } from 'zod'
 
-import { createStoreBridgeBrowser } from 'bridge-store/browser'
-import { Button, Card, CardContent, CardHeader, CardTitle } from '@/ui'
+	import { createStoreBridgeBrowserSync } from 'bridge-store/browser'
+	import { Button, Card, CardContent, CardHeader, CardTitle } from '@/ui'
 
 type State = {
   updatedAt: number
@@ -14,15 +14,15 @@ type State = {
   dispatch: (action: { type: string; payload?: any }) => void
 }
 
-const stateSchema = z.object({
-  updatedAt: z.number().describe('unix ms timestamp'),
-  items: z.array(z.object({ id: z.string(), text: z.string() })),
-})
+	const stateSchema = z.object({
+	  updatedAt: z.number().describe('unix ms timestamp'),
+	  items: z.array(z.object({ id: z.string(), text: z.string() })),
+	})
 
-const { store } = await createStoreBridgeBrowser<State>({
-  bridgeUrl: (window as any).__STOREBRIDGE_WS__ ?? 'ws://127.0.0.1:8787',
-  pageId: ${JSON.stringify(pageId)},
-  storeKey: 'main',
+	const bridge = createStoreBridgeBrowserSync<State>({
+	  bridgeUrl: (window as any).__STOREBRIDGE_WS__ ?? 'ws://127.0.0.1:8787',
+	  pageId: ${JSON.stringify(pageId)},
+	  storeKey: 'main',
   meta: {
     id: ${JSON.stringify(pageId)},
     title: ${JSON.stringify(title)},
@@ -48,17 +48,42 @@ const { store } = await createStoreBridgeBrowser<State>({
         const p = action.payload ?? {}
         set({ updatedAt: Number(p.updatedAt ?? Date.now()), items: p.items ?? [] })
       }
-    },
-  }),
-})
+	    },
+	  }),
+	})
 
-export default function Page() {
-  const updatedAt = useStore(store as any, (s: any) => s.updatedAt)
-  const items = useStore(store as any, (s: any) => s.items)
+	const store = bridge.store
 
-  return (
-    <div className="p-6">
-      <Card className="max-w-2xl">
+	export default function Page() {
+	  const updatedAt = useStore(store as any, (s: any) => s.updatedAt)
+	  const items = useStore(store as any, (s: any) => s.items)
+
+	  React.useEffect(() => {
+	    let closed = false
+	    let close = () => {}
+
+	    bridge
+	      .attach()
+	      .then((attached) => {
+	        if (closed) {
+	          attached.close()
+	          return
+	        }
+	        close = attached.close
+	      })
+	      .catch((err) => {
+	        console.error('[storebridge] attach failed', err)
+	      })
+
+	    return () => {
+	      closed = true
+	      close()
+	    }
+	  }, [])
+
+	  return (
+	    <div className="p-6">
+	      <Card className="max-w-2xl">
         <CardHeader>
           <CardTitle>${title}</CardTitle>
         </CardHeader>

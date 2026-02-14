@@ -7,7 +7,8 @@
     "agentstage": "./dist/cli.js"
   },
   "scripts": {
-    "dev": "tsx src/cli.ts",
+    "dev": "tsx src/cli.ts --help",
+    "dev:start": "tsx src/cli.ts start",
     "build": "rimraf dist && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

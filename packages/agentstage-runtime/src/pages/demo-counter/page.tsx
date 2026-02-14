@@ -2,7 +2,7 @@ import React from 'react'
 import { useStore } from 'zustand'
 import { z } from 'zod'
 
-import { createStoreBridgeBrowser } from 'bridge-store/browser'
+import { createStoreBridgeBrowserSync } from 'bridge-store/browser'
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/ui'
 
 type State = {
@@ -18,7 +18,7 @@ const stateSchema = z.object({
   items: z.array(z.object({ id: z.string(), text: z.string() })),
 })
 
-const { store } = await createStoreBridgeBrowser<State>({
+const bridge = createStoreBridgeBrowserSync<State>({
   bridgeUrl: import.meta.env.VITE_STOREBRIDGE_WS ?? 'ws://127.0.0.1:8787',
   pageId,
   storeKey: 'main',
@@ -51,9 +51,34 @@ const { store } = await createStoreBridgeBrowser<State>({
   }),
 })
 
+const store = bridge.store
+
 export default function Page() {
   const updatedAt = useStore(store as any, (s: any) => s.updatedAt)
   const items = useStore(store as any, (s: any) => s.items)
+
+  React.useEffect(() => {
+    let closed = false
+    let close = () => {}
+
+    bridge
+      .attach()
+      .then((attached) => {
+        if (closed) {
+          attached.close()
+          return
+        }
+        close = attached.close
+      })
+      .catch((err) => {
+        console.error('[storebridge] attach failed', err)
+      })
+
+    return () => {
+      closed = true
+      close()
+    }
+  }, [])
 
   return (
     <div className="p-6">
