@@ -1,0 +1,11 @@
+{
+  "name": "bridge-store-node-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "node client.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}
