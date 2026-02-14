@@ -3,10 +3,10 @@ import { z } from 'zod'
 
 import { createBridgeStore } from '../src/client/bridgeStore.js'
 
-// We stub attachZustandBridge so this test stays unit-level.
+// We stub attachZustandHost so this test stays unit-level.
 vi.mock('../src/client/zustand.js', async () => {
   return {
-    attachZustandBridge: vi.fn(async (opts: any) => {
+    attachZustandHost: vi.fn(async (opts: any) => {
       return {
         pageId: opts.pageId,
         storeKey: opts.storeKey,
@@ -18,7 +18,7 @@ vi.mock('../src/client/zustand.js', async () => {
   }
 })
 
-const { attachZustandBridge } = await import('../src/client/zustand.js')
+const { attachZustandHost } = await import('../src/client/zustand.js')
 
 describe('createBridgeStore', () => {
   it('converts zod schemas to JSON schema and passes pageId/storeKey to attach', async () => {
@@ -52,7 +52,7 @@ describe('createBridgeStore', () => {
 
     expect(res.storeId).toContain('demo:counter#')
 
-    const call = (attachZustandBridge as any).mock.calls.at(-1)?.[0]
+    const call = (attachZustandHost as any).mock.calls.at(-1)?.[0]
     expect(call.pageId).toBe('demo:counter')
     expect(call.storeKey).toBe('main')
 

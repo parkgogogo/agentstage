@@ -3,7 +3,7 @@ import type { ZodTypeAny } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 import type { PageId, StageAction, StageMeta, StoreId, StoreKey } from "../shared/types.js";
-import { attachZustandBridge } from "./zustand.js";
+import { attachZustandHost } from "./zustand.js";
 import { semanticError } from "../shared/errors.js";
 
 export type ZodActionDef = {
@@ -118,7 +118,7 @@ export async function createBridgeStore<TState>(opts: BridgeStoreOptions<TState>
 
   const pageId: PageId = (opts.pageId ?? (wireMeta.id ?? "page")) as string;
 
-  const attached = await attachZustandBridge({
+  const attached = await attachZustandHost({
     bridgeUrl: opts.bridgeUrl,
     pageId,
     storeKey: opts.storeKey,

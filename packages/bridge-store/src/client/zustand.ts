@@ -3,7 +3,7 @@ import type { PageId, StageAction, StageMeta, StoreId, StoreKey } from "../share
 import type { JsonRpcRequest } from "../shared/protocol.js";
 import { WsRpcTransport } from "./transport.js";
 
-export type BridgeClientOptions<TState> = {
+export type StoreHostOptions<TState> = {
   bridgeUrl: string;
   pageId?: PageId;
   storeKey?: StoreKey;
@@ -14,6 +14,9 @@ export type BridgeClientOptions<TState> = {
   validateState?: (state: unknown) => void;
   validateAction?: (action: StageAction) => void;
 };
+
+/** @deprecated Use StoreHostOptions */
+export type BridgeClientOptions<TState> = StoreHostOptions<TState>;
 
 // Attaches a zustand store to the bridge server.
 // - Registers storeId + meta + initial state
@@ -33,7 +36,7 @@ function defaultStoreId(pageId: PageId): StoreId {
   return `${pageId}#${randomId().slice(0, 8)}`;
 }
 
-export async function attachZustandBridge<TState>(opts: BridgeClientOptions<TState>) {
+export async function attachZustandHost<TState>(opts: StoreHostOptions<TState>) {
   const { bridgeUrl, meta, store } = opts;
   const pageId = opts.pageId ?? defaultPageId(meta);
   const storeId = opts.storeId ?? defaultStoreId(pageId);
@@ -91,3 +94,6 @@ export async function attachZustandBridge<TState>(opts: BridgeClientOptions<TSta
     },
   };
 }
+
+/** @deprecated Use attachZustandHost */
+export const attachZustandBridge = attachZustandHost;

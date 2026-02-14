@@ -1,6 +1,6 @@
 import WebSocket from 'ws'
 import type { JsonRpcFailure, JsonRpcId } from '../shared/protocol.js'
-import { SemanticError, semanticError } from '../shared/errors.js'
+import { SemanticError } from '../shared/errors.js'
 import type { PageId, StageAction, StageMeta, StoreId, StoreKey } from '../shared/types.js'
 
 type StateChanged = {
@@ -18,11 +18,18 @@ type RpcNotification = { jsonrpc: '2.0'; method: string; params?: any }
 
 type AnyMsg = RpcResponseOk | RpcResponseErr | RpcNotification
 
-export type BridgeClientOptions = {
+export type BridgeSdkOptions = {
   url: string // ws://127.0.0.1:8787?token=...
 }
 
-export class BridgeClient {
+/**
+ * Bridge SDK (Node side).
+ *
+ * Naming note:
+ * - Browser side attaches/hosts the zustand store (Store Host).
+ * - Node side is the control SDK used by Agent/CLI.
+ */
+export class BridgeSdk {
   private ws: WebSocket
   private nextId = 1
   private pending = new Map<JsonRpcId, { resolve: (v: any) => void; reject: (e: any) => void }>()
@@ -45,14 +52,14 @@ export class BridgeClient {
     })
   }
 
-  static async connect(url: string | BridgeClientOptions): Promise<BridgeClient> {
+  static async connect(url: string | BridgeSdkOptions): Promise<BridgeSdk> {
     const u = typeof url === 'string' ? url : url.url
     const ws = new WebSocket(u)
     await new Promise<void>((resolve, reject) => {
       ws.once('open', () => resolve())
       ws.once('error', (e) => reject(e))
     })
-    return new BridgeClient(ws)
+    return new BridgeSdk(ws)
   }
 
   close() {
@@ -154,7 +161,6 @@ export class BridgeClient {
 
       await this.request('store.subscribe', { storeId })
 
-      // unsubscribe is local-only for now
       return () => {
         const cur = this.stateSubs.get(storeId)
         if (!cur) return
@@ -164,3 +170,6 @@ export class BridgeClient {
     },
   }
 }
+
+/** @deprecated Use BridgeSdk */
+export const BridgeClient = BridgeSdk
