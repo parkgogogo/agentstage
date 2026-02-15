@@ -34,7 +34,7 @@ export type GatewayMessage =
   | { type: 'store.disconnect' };
 
 // Messages from Gateway to Browser
-export type BrowserMessage =
+export type ServerMessage =
   | { type: 'client.setState'; payload: { state: unknown; expectedVersion?: number } }
   | { type: 'client.dispatch'; payload: { action: { type: string; payload?: unknown } } }
   | { type: 'client.ping' };

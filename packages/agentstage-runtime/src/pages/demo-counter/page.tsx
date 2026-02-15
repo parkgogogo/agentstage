@@ -1,14 +1,13 @@
 import React from 'react'
 import { useStore } from 'zustand'
 import { z } from 'zod'
-
-import { createStoreBridgeBrowserSync } from 'bridge-store/browser'
+import { createBridgeStore } from '@agentstage/bridge/browser'
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@/ui'
 
-type State = {
+interface State {
   updatedAt: number
   items: Array<{ id: string; text: string }>
-  dispatch: (action: { type: string; payload?: any }) => void
+  dispatch: (action: { type: string; payload?: unknown }) => void
 }
 
 const pageId = 'demo-counter'
@@ -18,33 +17,29 @@ const stateSchema = z.object({
   items: z.array(z.object({ id: z.string(), text: z.string() })),
 })
 
-const bridge = createStoreBridgeBrowserSync<State>({
-  bridgeUrl: import.meta.env.VITE_STOREBRIDGE_WS ?? 'ws://127.0.0.1:8787',
+const bridge = createBridgeStore<State, {
+  setData: { payload: { updatedAt: number; items: Array<{ id: string; text: string }> } }
+}>({
   pageId,
   storeKey: 'main',
-  meta: {
-    id: pageId,
-    title: 'Demo Counter',
-    store: {
-      stateSchema,
-      actions: [
-        {
-          type: `${pageId}.setData`,
-          description: 'Agent writes new data to render',
-          payloadSchema: z.object({
-            updatedAt: z.number(),
-            items: z.array(z.object({ id: z.string(), text: z.string() })),
-          }),
-        },
-      ],
+  description: {
+    schema: stateSchema,
+    actions: {
+      setData: {
+        description: 'Agent writes new data to render',
+        payload: z.object({
+          updatedAt: z.number(),
+          items: z.array(z.object({ id: z.string(), text: z.string() })),
+        }),
+      },
     },
   },
   createState: (set, get) => ({
     updatedAt: Date.now(),
     items: [],
     dispatch: (action) => {
-      if (action.type === `${pageId}.setData`) {
-        const p = action.payload ?? {}
+      if (action.type === 'setData') {
+        const p = action.payload as { updatedAt?: number; items?: Array<{ id: string; text: string }> } ?? {}
         set({ updatedAt: Number(p.updatedAt ?? Date.now()), items: p.items ?? [] })
       }
     },
@@ -54,24 +49,24 @@ const bridge = createStoreBridgeBrowserSync<State>({
 const store = bridge.store
 
 export default function Page() {
-  const updatedAt = useStore(store as any, (s: any) => s.updatedAt)
-  const items = useStore(store as any, (s: any) => s.items)
+  const updatedAt = useStore(store, (s) => s.updatedAt)
+  const items = useStore(store, (s) => s.items)
 
   React.useEffect(() => {
     let closed = false
     let close = () => {}
 
     bridge
-      .attach()
-      .then((attached) => {
+      .connect()
+      .then((connected) => {
         if (closed) {
-          attached.close()
+          connected.disconnect()
           return
         }
-        close = attached.close
+        close = connected.disconnect
       })
       .catch((err) => {
-        console.error('[storebridge] attach failed', err)
+        console.error('[storebridge] connect failed', err)
       })
 
     return () => {
@@ -91,10 +86,10 @@ export default function Page() {
 
           <div className="space-y-2">
             {items.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No data yet. Use StoreBridge SDK to dispatch '{pageId}.setData'.</div>
+              <div className="text-sm text-muted-foreground">No data yet. Use StoreBridge SDK to dispatch 'setData'.</div>
             ) : (
               <ul className="list-disc pl-5 space-y-1">
-                {items.map((it: any) => (
+                {items.map((it) => (
                   <li key={it.id} className="text-sm">{it.text}</li>
                 ))}
               </ul>
@@ -105,7 +100,7 @@ export default function Page() {
             variant="secondary"
             onClick={() =>
               store.getState().dispatch({
-                type: `${pageId}.setData`,
+                type: 'setData',
                 payload: {
                   updatedAt: Date.now(),
                   items: [

@@ -1,9 +1,10 @@
-import type { 
-  StoreId, 
-  PageId, 
-  StoreKey, 
-  RegisteredStore, 
-  StoreChangeEvent 
+import { WebSocket } from 'ws';
+import type {
+  StoreId,
+  PageId,
+  StoreKey,
+  RegisteredStore,
+  StoreChangeEvent
 } from './types.js';
 
 export class StoreRegistry {

@@ -12,7 +12,7 @@
   "dependencies": {
     "@tanstack/react-router": "^1.159.10",
     "@tanstack/react-router-devtools": "^1.159.10",
-    "bridge-store": "workspace:*",
+    "@agentstage/bridge": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.536.0",

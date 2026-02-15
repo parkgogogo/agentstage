@@ -224,6 +224,3 @@ export class BridgeClient {
     this.ws?.close();
   }
 }
-
-export { BridgeClient };
-export type { StoreSummary, StoreDescription, StateSnapshot };

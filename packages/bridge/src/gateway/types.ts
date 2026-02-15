@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'http';
+import type WebSocket from 'ws';
 import type { StoreDescription } from '../shared/types.js';
 
 export type StoreId = string;
