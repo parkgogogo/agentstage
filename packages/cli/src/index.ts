@@ -2,27 +2,40 @@
 import { Command } from 'commander';
 import consola from 'consola';
 import { initCommand } from './commands/init.js';
-import { devCommand } from './commands/dev.js';
-import { pageNewCommand } from './commands/page-new.js';
-import { bridgeCommand } from './commands/bridge.js';
+import { startCommand } from './commands/start.js';
+import { stopCommand } from './commands/stop.js';
+import { statusCommand } from './commands/status.js';
+import { lsCommand } from './commands/ls.js';
+import { inspectCommand } from './commands/inspect.js';
+import { watchCommand } from './commands/watch.js';
+import { execCommand } from './commands/exec.js';
+import { addPageCommand } from './commands/add-page.js';
+import { rmPageCommand } from './commands/rm-page.js';
+import { componentsCommand } from './commands/components.js';
+import { addCommand } from './commands/add.js';
 
 const program = new Command();
 
 program
   .name('agentstage')
   .description('Agent UI Stage CLI - Create interactive UI for AI agents')
-  .version('0.1.0')
-  .configureOutput({
-    outputError: (str, write) => write(`Error: ${str}`),
-  });
+  .version('0.2.0');
 
-// Register commands
+// 注册命令
 program.addCommand(initCommand);
-program.addCommand(devCommand);
-program.addCommand(pageNewCommand);
-program.addCommand(bridgeCommand);
+program.addCommand(startCommand);
+program.addCommand(stopCommand);
+program.addCommand(statusCommand);
+program.addCommand(lsCommand);
+program.addCommand(inspectCommand);
+program.addCommand(watchCommand);
+program.addCommand(execCommand);
+program.addCommand(addPageCommand);
+program.addCommand(rmPageCommand);
+program.addCommand(componentsCommand);
+program.addCommand(addCommand);
 
-// Global error handler
+// 错误处理
 program.exitOverride();
 
 try {
