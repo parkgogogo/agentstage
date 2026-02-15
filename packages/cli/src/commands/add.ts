@@ -3,7 +3,7 @@ import * as p from '@clack/prompts';
 import consola from 'consola';
 import c from 'picocolors';
 import { execa } from 'execa';
-import { getProjectDir } from '../utils/paths.js';
+import { getWorkspaceDir } from '../utils/paths.js';
 
 export const addCommand = new Command('add')
   .description('Add a shadcn/ui component')
@@ -12,7 +12,7 @@ export const addCommand = new Command('add')
     const s = p.spinner();
     
     try {
-      const projectDir = getProjectDir();
+      const workspaceDir = await getWorkspaceDir();
       
       s.start(`Installing ${component}...`);
       

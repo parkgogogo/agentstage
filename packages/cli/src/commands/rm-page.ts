@@ -1,7 +1,5 @@
 import { Command } from 'commander';
-import * as p from '@clack/prompts';
 import consola from 'consola';
-import c from 'picocolors';
 import { rm } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'pathe';
@@ -12,7 +10,7 @@ export const rmPageCommand = new Command('rm-page')
   .argument('<name>', 'Page name')
   .action(async (name) => {
     try {
-      const pagesDir = getPagesDir();
+      const pagesDir = await getPagesDir();
       const pageDir = join(pagesDir, name);
       
       if (!existsSync(pageDir)) {
@@ -20,18 +18,7 @@ export const rmPageCommand = new Command('rm-page')
         process.exit(1);
       }
       
-      const confirm = await p.confirm({
-        message: `Are you sure you want to delete "${c.red(name)}"?`,
-        initialValue: false,
-      });
-      
-      if (p.isCancel(confirm) || !confirm) {
-        consola.info('Cancelled');
-        return;
-      }
-      
       await rm(pageDir, { recursive: true });
-      
       consola.success(`Page "${name}" deleted`);
       
     } catch (error: any) {

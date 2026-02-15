@@ -10,14 +10,13 @@ export const lsCommand = new Command('ls')
   .description('List all pages and their store status')
   .action(async () => {
     try {
-      const pagesDir = getPagesDir();
+      const pagesDir = await getPagesDir();
       const pages = await readdir(pagesDir, { withFileTypes: true });
       
       console.log();
       console.log(c.bold('Pages:'));
       console.log();
       
-      // 尝试连接 Bridge 获取状态
       let stores: any[] = [];
       try {
         const client = new BridgeClient('ws://localhost:8787/_bridge');

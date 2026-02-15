@@ -3,23 +3,23 @@ import * as p from '@clack/prompts';
 import consola from 'consola';
 import c from 'picocolors';
 import { execa } from 'execa';
-import { writeFile, readFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'pathe';
-import { getPidFile, getProjectDir } from '../utils/paths.js';
+import { getWorkspaceDir, getPidFile } from '../utils/paths.js';
 
 export const startCommand = new Command('start')
   .description('Start the Agentstage Runtime (background service)')
   .action(async () => {
-    const projectDir = getProjectDir();
-    const pidFile = getPidFile();
+    const workspaceDir = await getWorkspaceDir();
+    const pidFile = await getPidFile();
     
     // 检查是否已运行
     if (existsSync(pidFile)) {
       const pid = parseInt(await readFile(pidFile, 'utf8').catch(() => '0'));
       if (pid > 0) {
         try {
-          process.kill(pid, 0); // 检查进程是否存在
+          process.kill(pid, 0);
           consola.warn(`Runtime is already running (PID: ${pid})`);
           return;
         } catch {
@@ -32,9 +32,8 @@ export const startCommand = new Command('start')
     s.start('Starting Agentstage Runtime...');
     
     try {
-      // 启动 TanStack Start 开发服务器
       const subprocess = execa('npm', ['run', 'dev'], {
-        cwd: projectDir,
+        cwd: workspaceDir,
         detached: true,
         stdio: 'ignore',
         env: {
@@ -44,11 +43,9 @@ export const startCommand = new Command('start')
         },
       });
       
-      // 记录 PID
-      await mkdir(join(projectDir, '.agentstage'), { recursive: true });
+      await mkdir(join(workspaceDir, '.agentstage'), { recursive: true });
       await writeFile(pidFile, String(subprocess.pid));
       
-      // 等待服务启动
       await new Promise((resolve) => setTimeout(resolve, 2000));
       
       s.stop('Runtime started successfully');
@@ -57,7 +54,7 @@ export const startCommand = new Command('start')
       console.log(`  Web:    ${c.cyan('http://localhost:3000')}`);
       console.log(`  Bridge: ${c.cyan('ws://localhost:8787/_bridge')}`);
       console.log();
-      console.log(`  Run ${c.cyan('agentstage status')} to check status`);
+      console.log(`  Workspace: ${c.gray(workspaceDir)}`);
       
     } catch (error: any) {
       s.stop('Failed to start runtime');

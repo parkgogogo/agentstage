@@ -3,90 +3,151 @@ import * as p from '@clack/prompts';
 import consola from 'consola';
 import c from 'picocolors';
 import { execa } from 'execa';
-import { mkdir, writeFile, readFile, readdir } from 'fs/promises';
+import { mkdir, writeFile, readFile, readdir, rm } from 'fs/promises';
 import { existsSync } from 'fs';
-import { resolve, join } from 'pathe';
+import { resolve, join, basename } from 'pathe';
+import { homedir } from 'os';
+import { setWorkspaceDir, getWorkspaceDir } from '../utils/paths.js';
 
 export const initCommand = new Command('init')
-  .description('Initialize a new Agentstage project with TanStack Start + Tailwind + shadcn/ui')
-  .argument('[directory]', 'Target directory', '.')
-  .action(async (directory) => {
-    const targetDir = resolve(directory);
-    const projectName = directory === '.' ? 'my-agentstage-app' : directory;
+  .description('Initialize a new Agentstage project')
+  .argument('[name]', 'Project name', 'my-agentstage-app')
+  .action(async (name) => {
+    // 1. 选择工作目录模式
+    const locationMode = await p.select({
+      message: 'Where to store the project?',
+      options: [
+        { 
+          value: 'default', 
+          label: `Default (~/.agentstage/${name})`,
+          hint: 'Recommended'
+        },
+        { 
+          value: 'current', 
+          label: 'Current directory (./.agentstage)' 
+        },
+        { 
+          value: 'custom', 
+          label: 'Custom path' 
+        },
+      ],
+    });
     
-    // 检查目录
-    if (existsSync(targetDir) && (await readdirSafe(targetDir)).length > 0) {
-      const shouldContinue = await p.confirm({
-        message: `Directory ${c.cyan(targetDir)} is not empty. Continue?`,
-        initialValue: false,
-      });
-      if (p.isCancel(shouldContinue) || !shouldContinue) {
-        consola.info('Cancelled');
-        return;
+    if (p.isCancel(locationMode)) {
+      consola.info('Cancelled');
+      return;
+    }
+    
+    // 2. 确定目标目录
+    let targetDir: string;
+    switch (locationMode) {
+      case 'default':
+        targetDir = join(homedir(), '.agentstage', name);
+        break;
+      case 'current':
+        targetDir = join(process.cwd(), '.agentstage');
+        break;
+      case 'custom':
+        const customPath = await p.text({
+          message: 'Enter custom path:',
+          placeholder: '/path/to/project',
+          validate: (value) => {
+            if (!value || value.trim() === '') {
+              return 'Path is required';
+            }
+          },
+        });
+        if (p.isCancel(customPath)) {
+          consola.info('Cancelled');
+          return;
+        }
+        targetDir = resolve(customPath);
+        break;
+      default:
+        targetDir = join(homedir(), '.agentstage', name);
+    }
+    
+    // 3. 检查目录
+    if (existsSync(targetDir)) {
+      const files = await readdirSafe(targetDir);
+      if (files.length > 0) {
+        const shouldContinue = await p.confirm({
+          message: `Directory ${c.cyan(targetDir)} is not empty. Continue?`,
+          initialValue: false,
+        });
+        if (p.isCancel(shouldContinue) || !shouldContinue) {
+          consola.info('Cancelled');
+          return;
+        }
+        // 清空目录
+        await rm(targetDir, { recursive: true });
       }
     }
+    
+    // 4. 保存工作目录配置
+    await setWorkspaceDir(targetDir);
     
     const s = p.spinner();
     
     try {
-      // 1. 创建 TanStack Start 项目
+      // 5. 创建项目
       s.start('Creating TanStack Start project...');
-      await execa('npx', ['create-tsrouter@latest', projectName, '--template', 'file-router'], {
-        cwd: targetDir === process.cwd() ? process.cwd() : resolve(targetDir, '..'),
+      await execa('npx', ['create-tsrouter@latest', basename(targetDir), '--template', 'file-router'], {
+        cwd: resolve(targetDir, '..'),
         stdio: 'pipe',
       });
       s.stop('TanStack Start project created');
       
-      const projectDir = join(targetDir === process.cwd() ? process.cwd() : resolve(targetDir, '..'), projectName);
-      
-      // 2. 初始化 Tailwind CSS
+      // 6. 配置 Tailwind
       s.start('Configuring Tailwind CSS...');
       await execa('npx', ['tailwindcss', 'init', '-p'], {
-        cwd: projectDir,
+        cwd: targetDir,
         stdio: 'pipe',
       });
-      await configureTailwind(projectDir);
+      await configureTailwind(targetDir);
       s.stop('Tailwind CSS configured');
       
-      // 3. 初始化 shadcn/ui
+      // 7. 初始化 shadcn/ui
       s.start('Initializing shadcn/ui...');
       await execa('npx', ['shadcn@latest', 'init', '-y', '--base-color', 'neutral'], {
-        cwd: projectDir,
+        cwd: targetDir,
         stdio: 'pipe',
       });
       s.stop('shadcn/ui initialized');
       
-      // 4. 安装基础组件
+      // 8. 安装基础组件
       s.start('Installing base components...');
       await execa('npx', ['shadcn', 'add', 'button', 'card', 'input', '-y'], {
-        cwd: projectDir,
+        cwd: targetDir,
         stdio: 'pipe',
       });
       s.stop('Base components installed');
       
-      // 5. 安装 Bridge
+      // 9. 安装 Bridge
       s.start('Installing @agentstage/bridge...');
       await execa('npm', ['install', '@agentstage/bridge'], {
-        cwd: projectDir,
+        cwd: targetDir,
         stdio: 'pipe',
       });
       s.stop('@agentstage/bridge installed');
       
-      // 6. 创建 Bridge API 路由
+      // 10. 创建 Bridge 文件
       s.start('Creating Bridge Gateway...');
-      await createBridgeFiles(projectDir);
+      await createBridgeFiles(targetDir);
       s.stop('Bridge Gateway created');
       
-      // 7. 创建示例页面
+      // 11. 创建示例页面
       s.start('Creating demo page...');
-      await createDemoPage(projectDir);
+      await createDemoPage(targetDir);
       s.stop('Demo page created');
       
       // 完成
       console.log();
       consola.success('Project created successfully!');
       console.log();
-      console.log(`  cd ${c.cyan(projectName)}`);
+      console.log(`  Location: ${c.cyan(targetDir)}`);
+      console.log();
+      console.log(`  cd ${c.cyan(targetDir)}`);
       console.log(`  ${c.cyan('agentstage start')}`);
       console.log();
       
@@ -106,7 +167,6 @@ async function readdirSafe(dir: string): Promise<string[]> {
 }
 
 async function configureTailwind(projectDir: string) {
-  // 更新 tailwind.config.ts
   const tailwindConfig = `import type { Config } from "tailwindcss";
 
 export default {
@@ -167,7 +227,6 @@ export default {
 }
 
 async function createBridgeFiles(projectDir: string) {
-  // 创建 Bridge API 路由
   const bridgeApiRoute = `import { json } from '@tanstack/react-start';
 import { createBridgeGateway } from '@agentstage/bridge';
 import type { APIRoute } from '@tanstack/react-start';
@@ -188,7 +247,6 @@ export const APIRoute: APIRoute = async ({ request }) => {
   await mkdir(join(projectDir, 'app', 'routes', 'api'), { recursive: true });
   await writeFile(join(projectDir, 'app', 'routes', 'api', 'bridge.ts'), bridgeApiRoute);
   
-  // 创建动态页面路由
   const pageRoute = `import { createFileRoute } from '@tanstack/react-router';
 import React from 'react';
 
