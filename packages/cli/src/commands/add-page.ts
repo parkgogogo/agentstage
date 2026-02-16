@@ -37,7 +37,7 @@ export const addPageCommand = new Command('add-page')
 
       const pageContent = `import { z } from 'zod';
 import { createFileRoute } from '@tanstack/react-router';
-import { createBridgeStore } from '@agent-stage/bridge/browser';
+import { createBridgeStore } from 'agent-stage-bridge/browser';
 import { useEffect } from 'react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';

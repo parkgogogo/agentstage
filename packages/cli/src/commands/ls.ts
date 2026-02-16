@@ -5,7 +5,7 @@ import { readdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'pathe';
 import { getWorkspaceDir, readRuntimeConfig, isInitialized } from '../utils/paths.js';
-import { BridgeClient } from '@agent-stage/bridge/sdk';
+import { BridgeClient } from 'agent-stage-bridge/sdk';
 
 export const lsCommand = new Command('ls')
   .description('List all pages and their store status')

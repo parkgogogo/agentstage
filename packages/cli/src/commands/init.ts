@@ -199,10 +199,10 @@ async function configurePackageJson(targetDir: string): Promise<void> {
   if (isDev) {
     // In dev mode, use file: protocol to reference the local bridge package
     // This works with both npm and pnpm
-    packageJson.dependencies['@agent-stage/bridge'] = `file:${localBridgePath}`;
+    packageJson.dependencies['agent-stage-bridge'] = `file:${localBridgePath}`;
   } else {
     // Use npm version for production
-    packageJson.dependencies['@agent-stage/bridge'] = '^0.1.0';
+    packageJson.dependencies['agent-stage-bridge'] = '^0.1.0';
   }
 
   await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));

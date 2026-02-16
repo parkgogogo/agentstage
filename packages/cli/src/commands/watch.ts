@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import consola from 'consola';
 import c from 'picocolors';
-import { BridgeClient } from '@agent-stage/bridge/sdk';
+import { BridgeClient } from 'agent-stage-bridge/sdk';
 import { readRuntimeConfig, isInitialized } from '../utils/paths.js';
 
 export const watchCommand = new Command('watch')

@@ -12,7 +12,7 @@
     "typecheck": "pnpm -C ../bridge build && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@agentstage/bridge": "workspace:*",
+    "agent-stage-bridge": "file:../bridge",
     "@clack/prompts": "^0.8.2",
     "commander": "^12.1.0",
     "consola": "^3.2.3",
@@ -25,5 +25,8 @@
     "rimraf": "^6.0.1",
     "tsx": "^4.21.0",
     "typescript": "^5.8.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

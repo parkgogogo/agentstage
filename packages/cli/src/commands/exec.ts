@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import consola from 'consola';
-import { BridgeClient } from '@agent-stage/bridge/sdk';
+import { BridgeClient } from 'agent-stage-bridge/sdk';
 import { readRuntimeConfig, isInitialized } from '../utils/paths.js';
 
 export const execCommand = new Command('exec')

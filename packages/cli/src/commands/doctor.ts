@@ -177,7 +177,7 @@ export const doctorCommand = new Command('doctor')
         results.push({
           name: 'Dependencies',
           status: 'error',
-          message: '@agent-stage/bridge not installed',
+          message: 'agent-stage-bridge not installed',
           details: ['Run: npm install @agentstage/bridge'],
         });
       } else {

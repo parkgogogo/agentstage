@@ -5,16 +5,16 @@
  *
  * @example
  * // Gateway side (TanStack Start)
- * import { createBridgeGateway, createBridgeApiHandler } from '@agent-stage/bridge';
+ * import { createBridgeGateway, createBridgeApiHandler } from 'agent-stage-bridge';
  *
  * // Browser side
- * import { createBridgeStore } from '@agent-stage/bridge/browser';
+ * import { createBridgeStore } from 'agent-stage-bridge/browser';
  *
  * // CLI/SDK side
- * import { BridgeClient } from '@agent-stage/bridge/sdk';
+ * import { BridgeClient } from 'agent-stage-bridge/sdk';
  *
  * // Vite Plugin
- * import { bridgePlugin } from '@agent-stage/bridge/vite';
+ * import { bridgePlugin } from 'agent-stage-bridge/vite';
  */
 
 export type * from './shared/types.js';
