@@ -3,41 +3,79 @@ import * as p from '@clack/prompts';
 import consola from 'consola';
 import c from 'picocolors';
 import { execa } from 'execa';
-import { mkdir, writeFile, readFile, readdir, rm } from 'fs/promises';
+import { mkdir, writeFile, readdir, readFile, cp } from 'fs/promises';
 import { existsSync } from 'fs';
-import { resolve, join, basename } from 'pathe';
+import { resolve, join, basename, dirname } from 'pathe';
 import { homedir } from 'os';
-import { setWorkspaceDir, getWorkspaceDir } from '../utils/paths.js';
+import { fileURLToPath } from 'url';
+import { setWorkspaceDir } from '../utils/paths.js';
+
+const PROJECT_NAME = 'webapp';
+
+// Get the template directory path (works in both dev and prod)
+function getTemplateDir(): string {
+  const currentFilePath = fileURLToPath(import.meta.url);
+  const currentDir = dirname(currentFilePath);
+
+  // Production: template is next to dist
+  const prodPath = join(currentDir, '..', '..', 'template');
+  // Development: template is in the source
+  const devPath = join(currentDir, '..', '..', '..', 'template');
+
+  if (existsSync(prodPath)) {
+    return prodPath;
+  }
+  if (existsSync(devPath)) {
+    return devPath;
+  }
+
+  // Fallback: try current working directory relative paths
+  const cwdProdPath = join(process.cwd(), 'packages', 'cli', 'template');
+  if (existsSync(cwdProdPath)) {
+    return cwdProdPath;
+  }
+
+  throw new Error('Template directory not found. Please ensure the CLI is properly installed.');
+}
 
 export const initCommand = new Command('init')
   .description('Initialize a new Agentstage project')
-  .argument('[name]', 'Project name', 'my-agentstage-app')
-  .action(async (name) => {
+  .option('-y, --yes', 'Use default settings (non-interactive)', false)
+  .action(async (options) => {
+    const name = PROJECT_NAME;
+    const useDefault = options.yes;
+
     // 1. 选择工作目录模式
-    const locationMode = await p.select({
-      message: 'Where to store the project?',
-      options: [
-        { 
-          value: 'default', 
-          label: `Default (~/.agentstage/${name})`,
-          hint: 'Recommended'
-        },
-        { 
-          value: 'current', 
-          label: 'Current directory (./.agentstage)' 
-        },
-        { 
-          value: 'custom', 
-          label: 'Custom path' 
-        },
-      ],
-    });
-    
-    if (p.isCancel(locationMode)) {
-      consola.info('Cancelled');
-      return;
+    let locationMode: string;
+    if (useDefault) {
+      locationMode = 'default';
+    } else {
+      const result = await p.select({
+        message: 'Where to store the project?',
+        options: [
+          {
+            value: 'default',
+            label: `Default (~/.agentstage/${name})`,
+            hint: 'Recommended'
+          },
+          {
+            value: 'current',
+            label: 'Current directory (./.agentstage)'
+          },
+          {
+            value: 'custom',
+            label: 'Custom path'
+          },
+        ],
+      });
+
+      if (p.isCancel(result)) {
+        consola.info('Cancelled');
+        return;
+      }
+      locationMode = result as string;
     }
-    
+
     // 2. 确定目标目录
     let targetDir: string;
     switch (locationMode) {
@@ -66,81 +104,46 @@ export const initCommand = new Command('init')
       default:
         targetDir = join(homedir(), '.agentstage', name);
     }
-    
+
     // 3. 检查目录
     if (existsSync(targetDir)) {
       const files = await readdirSafe(targetDir);
       if (files.length > 0) {
-        const shouldContinue = await p.confirm({
-          message: `Directory ${c.cyan(targetDir)} is not empty. Continue?`,
-          initialValue: false,
-        });
-        if (p.isCancel(shouldContinue) || !shouldContinue) {
-          consola.info('Cancelled');
-          return;
-        }
-        // 清空目录
-        await rm(targetDir, { recursive: true });
+        // 项目已存在，提示并退出
+        console.log();
+        consola.info('Project already initialized!');
+        console.log(`  Location: ${c.cyan(targetDir)}`);
+        console.log();
+        console.log(`  cd ${c.cyan(targetDir)}`);
+        console.log(`  ${c.cyan('agentstage start')}`);
+        console.log();
+        return;
       }
     }
-    
+
     // 4. 保存工作目录配置
     await setWorkspaceDir(targetDir);
-    
+
     const s = p.spinner();
-    
+
     try {
-      // 5. 创建项目
-      s.start('Creating TanStack Start project...');
-      await execa('npx', ['create-tsrouter@latest', basename(targetDir), '--template', 'file-router'], {
-        cwd: resolve(targetDir, '..'),
-        stdio: 'pipe',
-      });
-      s.stop('TanStack Start project created');
-      
-      // 6. 配置 Tailwind
-      s.start('Configuring Tailwind CSS...');
-      await execa('npx', ['tailwindcss', 'init', '-p'], {
-        cwd: targetDir,
-        stdio: 'pipe',
-      });
-      await configureTailwind(targetDir);
-      s.stop('Tailwind CSS configured');
-      
-      // 7. 初始化 shadcn/ui
-      s.start('Initializing shadcn/ui...');
-      await execa('npx', ['shadcn@latest', 'init', '-y', '--base-color', 'neutral'], {
-        cwd: targetDir,
-        stdio: 'pipe',
-      });
-      s.stop('shadcn/ui initialized');
-      
-      // 8. 安装基础组件
-      s.start('Installing base components...');
-      await execa('npx', ['shadcn', 'add', 'button', 'card', 'input', '-y'], {
-        cwd: targetDir,
-        stdio: 'pipe',
-      });
-      s.stop('Base components installed');
-      
-      // 9. 安装 Bridge
-      s.start('Installing @agentstage/bridge...');
-      await execa('npm', ['install', '@agentstage/bridge'], {
-        cwd: targetDir,
-        stdio: 'pipe',
-      });
-      s.stop('@agentstage/bridge installed');
-      
-      // 10. 创建 Bridge 文件
-      s.start('Creating Bridge Gateway...');
-      await createBridgeFiles(targetDir);
-      s.stop('Bridge Gateway created');
-      
-      // 11. 创建示例页面
-      s.start('Creating demo page...');
-      await createDemoPage(targetDir);
-      s.stop('Demo page created');
-      
+      // 5. 复制模板文件
+      s.start('Creating project from template...');
+      const templateDir = getTemplateDir();
+      await mkdir(targetDir, { recursive: true });
+      await copyTemplateFiles(templateDir, targetDir);
+      s.stop('Project template copied');
+
+      // 6. 更新 package.json 中的 workspace 依赖
+      s.start('Configuring project...');
+      await configurePackageJson(targetDir);
+      s.stop('Project configured');
+
+      // 7. 安装依赖
+      s.start('Installing dependencies...');
+      await installDependencies(targetDir);
+      s.stop('Dependencies installed');
+
       // 完成
       console.log();
       consola.success('Project created successfully!');
@@ -150,7 +153,7 @@ export const initCommand = new Command('init')
       console.log(`  cd ${c.cyan(targetDir)}`);
       console.log(`  ${c.cyan('agentstage start')}`);
       console.log();
-      
+
     } catch (error: any) {
       s.stop('Failed to create project');
       consola.error(error.message);
@@ -166,197 +169,61 @@ async function readdirSafe(dir: string): Promise<string[]> {
   }
 }
 
-async function configureTailwind(projectDir: string) {
-  const tailwindConfig = `import type { Config } from "tailwindcss";
+async function copyTemplateFiles(templateDir: string, targetDir: string): Promise<void> {
+  const entries = await readdir(templateDir, { withFileTypes: true });
 
-export default {
-  darkMode: ["class"],
-  content: [
-    "./index.html",
-    "./app/**/*.{js,ts,jsx,tsx}",
-    "./components/**/*.{js,ts,jsx,tsx}",
-  ],
-  theme: {
-    extend: {
-      colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
-      },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
-      },
-    },
-  },
-  plugins: [require("tailwindcss-animate")],
-} satisfies Config;
-`;
-  await writeFile(join(projectDir, 'tailwind.config.ts'), tailwindConfig);
-}
+  for (const entry of entries) {
+    const srcPath = join(templateDir, entry.name);
+    const destPath = join(targetDir, entry.name);
 
-async function createBridgeFiles(projectDir: string) {
-  const bridgeApiRoute = `import { json } from '@tanstack/react-start';
-import { createBridgeGateway } from '@agentstage/bridge';
-import type { APIRoute } from '@tanstack/react-start';
-
-const gateway = createBridgeGateway();
-
-export const APIRoute: APIRoute = async ({ request }) => {
-  const url = new URL(request.url);
-  
-  if (url.pathname === '/api/bridge/stores') {
-    return json({ stores: gateway.listStores() });
+    if (entry.isDirectory()) {
+      await mkdir(destPath, { recursive: true });
+      await copyTemplateFiles(srcPath, destPath);
+    } else {
+      await cp(srcPath, destPath);
+    }
   }
-  
-  return json({ error: 'Not found' }, { status: 404 });
-};
-`;
-  
-  await mkdir(join(projectDir, 'app', 'routes', 'api'), { recursive: true });
-  await writeFile(join(projectDir, 'app', 'routes', 'api', 'bridge.ts'), bridgeApiRoute);
-  
-  const pageRoute = `import { createFileRoute } from '@tanstack/react-router';
-import React from 'react';
-
-export const Route = createFileRoute('/p/$pageId')({
-  component: PageComponent,
-});
-
-function PageComponent() {
-  const { pageId } = Route.useParams();
-  const [Component, setComponent] = React.useState<React.ComponentType | null>(null);
-  
-  React.useEffect(() => {
-    import(\`../pages/\${pageId}/page.tsx\`).then((mod) => {
-      setComponent(() => mod.default);
-    }).catch(() => {
-      console.error(\`Page not found: \${pageId}\`);
-    });
-  }, [pageId]);
-  
-  if (!Component) return <div>Loading...</div>;
-  return <Component />;
-}
-`;
-  
-  await writeFile(join(projectDir, 'app', 'routes', 'p.$pageId.tsx'), pageRoute);
 }
 
-async function createDemoPage(projectDir: string) {
-  const demoPage = `import React from 'react';
-import { createFileRoute } from '@tanstack/react-router';
-import { useStore } from 'zustand';
-import { z } from 'zod';
-import { createBridgeStore } from '@agentstage/bridge/browser';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+async function configurePackageJson(targetDir: string): Promise<void> {
+  const packageJsonPath = join(targetDir, 'package.json');
+  const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
-export const Route = createFileRoute('/p/demo-counter')({
-  component: DemoCounterPage,
-});
+  // Replace workspace:* with actual version or local path
+  // In dev mode (monorepo), use file: protocol to reference the local bridge package
+  // Check if we're in the monorepo by looking for packages/bridge from the CLI location
+  const currentFilePath = fileURLToPath(import.meta.url);
+  const localBridgePath = resolve(join(dirname(currentFilePath), '..', '..', '..', 'bridge'));
+  const isDev = existsSync(localBridgePath);
 
-interface State {
-  count: number;
-  dispatch: (action: { type: string; payload?: unknown }) => void;
+  if (isDev) {
+    // In dev mode, use file: protocol to reference the local bridge package
+    // This works with both npm and pnpm
+    packageJson.dependencies['@agentstage/bridge'] = `file:${localBridgePath}`;
+  } else {
+    // Use npm version for production
+    packageJson.dependencies['@agentstage/bridge'] = '^0.1.0';
+  }
+
+  await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
 }
 
-const stateSchema = z.object({
-  count: z.number().describe('Counter value'),
-});
+async function installDependencies(targetDir: string): Promise<void> {
+  // Check if we're in the monorepo by looking for packages/bridge from the CLI location
+  const currentFilePath = fileURLToPath(import.meta.url);
+  const localBridgePath = resolve(join(dirname(currentFilePath), '..', '..', '..', 'bridge'));
+  const isDev = existsSync(localBridgePath);
 
-const bridge = createBridgeStore<State, {
-  increment: { payload: { by: number } };
-}>({
-  pageId: 'demo-counter',
-  storeKey: 'main',
-  description: {
-    schema: stateSchema,
-    actions: {
-      increment: {
-        description: 'Increment counter by N',
-        payload: z.object({ by: z.number() }),
-      },
-    },
-  },
-  createState: (set, get) => ({
-    count: 0,
-    dispatch: (action) => {
-      if (action.type === 'increment') {
-        const { by = 1 } = action.payload as { by?: number };
-        set({ count: get().count + by });
-      }
-    },
-  }),
-});
-
-const store = bridge.store;
-
-function DemoCounterPage() {
-  const count = useStore(store, (s) => s.count);
-
-  React.useEffect(() => {
-    let disconnect = () => {};
-    bridge.connect().then((conn) => {
-      disconnect = conn.disconnect;
-    });
-    return () => disconnect();
-  }, []);
-
-  return (
-    <div className="p-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Demo Counter</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-2xl font-mono">Count: {count}</p>
-          <div className="flex gap-2">
-            <Button onClick={() => store.getState().dispatch({ type: 'increment', payload: { by: 1 } })} >
-              +1
-            </Button>
-            <Button onClick={() => store.getState().dispatch({ type: 'increment', payload: { by: 5 } })} >
-              +5
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-`;
-  
-  await mkdir(join(projectDir, 'app', 'routes', 'pages', 'demo-counter'), { recursive: true });
-  await writeFile(join(projectDir, 'app', 'routes', 'pages', 'demo-counter', 'page.tsx'), demoPage);
+  if (isDev) {
+    // In development mode (monorepo), use pnpm
+    try {
+      await execa('pnpm', ['install'], { cwd: targetDir, stdio: 'pipe' });
+    } catch {
+      // Fallback to npm if pnpm is not available
+      await execa('npm', ['install'], { cwd: targetDir, stdio: 'pipe' });
+    }
+  } else {
+    // In production, use npm
+    await execa('npm', ['install'], { cwd: targetDir, stdio: 'pipe' });
+  }
 }

@@ -11,8 +11,11 @@ function generateStoreId(pageId: string): string {
 }
 
 function getGatewayUrl(): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}${WS_PATH}`;
+  return `${protocol}//${window.location.host}${WS_PATH}?type=browser`;
 }
 
 export function createBridgeStore<
@@ -21,7 +24,7 @@ export function createBridgeStore<
 >(
   options: CreateBridgeStoreOptions<TState, TActions>
 ): BridgeStore<TState> {
-  const gatewayUrl = options.gatewayUrl || getGatewayUrl();
+  const gatewayUrl = options.gatewayUrl;
   const storeKey = options.storeKey || 'main';
   const storeId = generateStoreId(options.pageId);
   
@@ -89,14 +92,17 @@ export function createBridgeStore<
   function handleGatewayMessage(data: string) {
     try {
       const msg = JSON.parse(data);
-      
+      console.log('[BridgeStore] Received message:', msg.type, msg);
+
       switch (msg.type) {
         case 'client.setState': {
           const { state, expectedVersion } = msg.payload;
+          console.log('[BridgeStore] setState received, expectedVersion:', expectedVersion, 'current version:', version);
           if (expectedVersion !== undefined && expectedVersion !== version) {
             console.warn('[BridgeStore] Version mismatch, ignoring setState');
             return;
           }
+          console.log('[BridgeStore] Calling store.setState with:', state);
           store.setState(state as TState);
           break;
         }
@@ -148,8 +154,14 @@ export function createBridgeStore<
           resolve({ storeId, disconnect: () => ws?.close() });
           return;
         }
-        
-        ws = new WebSocket(gatewayUrl);
+
+        const url = gatewayUrl || getGatewayUrl();
+        if (!url) {
+          reject(new Error('Cannot connect: gatewayUrl not provided and window is not available'));
+          return;
+        }
+
+        ws = new WebSocket(url);
         
         ws.onopen = () => {
           isConnected = true;

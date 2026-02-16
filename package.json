@@ -4,8 +4,8 @@
   "packageManager": "pnpm@9.15.4",
   "type": "module",
   "scripts": {
-    "dev": "pnpm -C packages/cli dev:start",
+    "dev": "pnpm -C packages/cli dev",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r --workspace-concurrency=1 typecheck"
   }
 }

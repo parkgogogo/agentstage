@@ -1,35 +1,44 @@
 import { Command } from 'commander';
+import * as p from '@clack/prompts';
 import consola from 'consola';
 import c from 'picocolors';
+import { execa } from 'execa';
 import { readdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'pathe';
-import { execa } from 'execa';
-import { getWorkspaceDir } from '../utils/paths.js';
-
-const REGISTRY_URL = 'https://ui.shadcn.com/registry/index.json';
+import { getWorkspaceDir, isInitialized } from '../utils/paths.js';
 
 export const componentsCommand = new Command('components')
   .description('Manage shadcn/ui components');
 
+// 检查初始化中间件
+const checkInit = () => {
+  if (!isInitialized()) {
+    consola.error('Project not initialized. Please run `agentstage init` first.');
+    process.exit(1);
+  }
+};
+
 componentsCommand
   .command('list')
-  .description('List installed and available components')
+  .description('List installed components')
   .action(async () => {
+    checkInit();
     try {
       const workspaceDir = await getWorkspaceDir();
-      const componentsDir = join(workspaceDir, 'components', 'ui');
-      
+
+      // 支持 src/components/ui (TanStack Start) 和 components/ui 两种结构
+      let componentsDir = join(workspaceDir, 'src', 'components', 'ui');
+      if (!existsSync(componentsDir)) {
+        componentsDir = join(workspaceDir, 'components', 'ui');
+      }
+
       let installed: string[] = [];
       if (existsSync(componentsDir)) {
         const files = await readdir(componentsDir);
         installed = files.filter(f => f.endsWith('.tsx')).map(f => f.replace('.tsx', ''));
       }
-      
-      const registry = await fetch(REGISTRY_URL).then(r => r.json()).catch(() => null);
-      const allComponents = registry?.items?.filter((i: any) => i.type === 'registry:ui') || [];
-      const available = allComponents.filter((c: any) => !installed.includes(c.name));
-      
+
       console.log();
       console.log(c.bold(`Installed (${installed.length}):`));
       if (installed.length > 0) {
@@ -37,64 +46,111 @@ componentsCommand
       } else {
         console.log(c.gray('  None'));
       }
-      
+
       console.log();
-      console.log(c.bold(`Available (${available.length}):`));
-      if (available.length > 0) {
-        const names = available.map((c: any) => c.name);
-        console.log('  ' + names.slice(0, 20).join('  ') + (names.length > 20 ? ' ...' : ''));
-      }
-      
+      console.log(`Use ${c.cyan('agentstage components available')} to see available components`);
+      console.log(`Use ${c.cyan('agentstage components add <component>')} to install`);
       console.log();
-      console.log(`Use ${c.cyan('agentstage add <component>')} to install`);
-      console.log();
-      
+
     } catch (error: any) {
       consola.error('Failed to list components:', error.message);
     }
   });
 
 componentsCommand
+  .command('available')
+  .description('List available components from shadcn/ui registry')
+  .action(async () => {
+    checkInit();
+    try {
+      const workspaceDir = await getWorkspaceDir();
+
+      console.log();
+      consola.info('Fetching available components from shadcn/ui registry...');
+      console.log();
+
+      // 使用 shadcn 原生的 list 命令
+      await execa('npx', ['shadcn@latest', 'list', '@shadcn'], {
+        cwd: workspaceDir,
+        stdio: 'inherit',
+      });
+
+    } catch (error: any) {
+      consola.error('Failed to list available components:', error.message);
+    }
+  });
+
+componentsCommand
   .command('search')
-  .description('Search for components')
+  .description('Search for components in shadcn/ui registry')
   .argument('<query>', 'Search query')
   .action(async (query) => {
+    checkInit();
     try {
-      const registry = await fetch(REGISTRY_URL).then(r => r.json()).catch(() => null);
-      const components = registry?.items?.filter((i: any) => 
-        i.type === 'registry:ui' && i.name.includes(query)
-      ) || [];
-      
+      const workspaceDir = await getWorkspaceDir();
+
       console.log();
-      console.log(c.bold(`Found ${components.length} components:`));
-      for (const comp of components) {
-        console.log(`  ${c.cyan(comp.name)} - ${comp.description || ''}`);
-      }
+      consola.info(`Searching for "${query}"...`);
       console.log();
-      
+
+      // 使用 shadcn 原生的 search 命令
+      await execa('npx', ['shadcn@latest', 'search', '@shadcn', '-q', query], {
+        cwd: workspaceDir,
+        stdio: 'inherit',
+      });
+
     } catch (error: any) {
       consola.error('Failed to search:', error.message);
     }
   });
 
-export const addCommand = new Command('add')
+componentsCommand
+  .command('add')
   .description('Add a shadcn/ui component')
-  .argument('<component>', 'Component name')
+  .argument('<component>', 'Component name (e.g., button, card, dialog)')
   .action(async (component) => {
+    checkInit();
+    const s = p.spinner();
+
     try {
       const workspaceDir = await getWorkspaceDir();
-      
-      consola.info(`Installing ${component}...`);
-      
-      await execa('npx', ['shadcn', 'add', component, '-y'], {
+
+      s.start(`Installing ${component}...`);
+
+      await execa('npx', ['shadcn@latest', 'add', component, '-y'], {
+        cwd: workspaceDir,
+        stdio: 'pipe',
+      });
+
+      s.stop(`${c.green('✓')} ${component} installed`);
+
+    } catch (error: any) {
+      s.stop('Installation failed');
+      consola.error(error.message);
+      process.exit(1);
+    }
+  });
+
+componentsCommand
+  .command('view')
+  .description('View a component before installing')
+  .argument('<component>', 'Component name to view')
+  .action(async (component) => {
+    checkInit();
+    try {
+      const workspaceDir = await getWorkspaceDir();
+
+      console.log();
+      consola.info(`Viewing ${component}...`);
+      console.log();
+
+      // 使用 shadcn 原生的 view 命令
+      await execa('npx', ['shadcn@latest', 'view', component], {
         cwd: workspaceDir,
         stdio: 'inherit',
       });
-      
-      consola.success(`${component} installed`);
-      
+
     } catch (error: any) {
-      consola.error('Installation failed:', error.message);
-      process.exit(1);
+      consola.error('Failed to view component:', error.message);
     }
   });

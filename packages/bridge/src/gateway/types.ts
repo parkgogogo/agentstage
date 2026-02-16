@@ -1,4 +1,4 @@
-import type { IncomingMessage } from 'http';
+import type { IncomingMessage, Server } from 'http';
 import type WebSocket from 'ws';
 import type { StoreDescription } from '../shared/types.js';
 
@@ -35,6 +35,8 @@ export interface Gateway {
   setState(id: StoreId, state: unknown, options?: { expectedVersion?: number }): Promise<void>;
   dispatch(id: StoreId, action: { type: string; payload?: unknown }): Promise<void>;
   subscribe(id: StoreId, ws: WebSocket, callback?: (event: StoreChangeEvent) => void): () => void;
+  attach(server: Server | import('http2').Http2SecureServer): import('ws').WebSocketServer;
+  destroy(): void;
 }
 
 export interface StoreChangeEvent {

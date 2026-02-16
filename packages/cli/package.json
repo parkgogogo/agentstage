@@ -1,7 +1,7 @@
 {
-  "name": "cli",
-  "private": true,
+  "name": "agentstage",
   "version": "0.2.0",
+  "files": ["dist", "template"],
   "type": "module",
   "bin": {
     "agentstage": "./dist/index.js"
@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "rimraf dist && tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "pnpm -C ../bridge build && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@agentstage/bridge": "workspace:*",

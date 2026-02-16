@@ -33,7 +33,7 @@ export class BridgeClient {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private eventHandlers = new Set<(event: BridgeEvent) => void>();
-  private pendingRequests = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
+  private pendingRequests = new Map<number, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
   private requestId = 0;
   private subscribedStores = new Set<string>();
   
@@ -153,14 +153,17 @@ export class BridgeClient {
     this.eventHandlers.add(handler);
     return () => this.eventHandlers.delete(handler);
   }
-  
-  async listStores(): Promise<StoreSummary[]> {
+
+  private async request<T>(method: string, params: unknown): Promise<T> {
     const id = ++this.requestId;
-    
-    return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
-      this.send({ id, method: 'listStores', params: {} });
-      
+
+    return new Promise<T>((resolve, reject) => {
+      this.pendingRequests.set(id, {
+        resolve: (v) => resolve(v as T),
+        reject: (e) => reject(e),
+      });
+      this.send({ id, method, params });
+
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
@@ -168,6 +171,20 @@ export class BridgeClient {
         }
       }, 5000);
     });
+  }
+  
+  async listStores(): Promise<StoreSummary[]> {
+    return this.request<StoreSummary[]>('listStores', {});
+  }
+
+  async describe(storeId: string): Promise<StoreDescription | undefined> {
+    const res = await this.request<StoreDescription | null>('describe', { storeId });
+    return res ?? undefined;
+  }
+
+  async getState(storeId: string): Promise<StateSnapshot | undefined> {
+    const res = await this.request<StateSnapshot | null>('getState', { storeId });
+    return res ?? undefined;
   }
   
   subscribe(storeId: string): void {
@@ -181,43 +198,11 @@ export class BridgeClient {
   }
   
   async setState(storeId: string, state: unknown, options?: { expectedVersion?: number }): Promise<void> {
-    const id = ++this.requestId;
-    
-    return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
-      this.send({
-        id,
-        method: 'setState',
-        params: { storeId, state, expectedVersion: options?.expectedVersion },
-      });
-      
-      setTimeout(() => {
-        if (this.pendingRequests.has(id)) {
-          this.pendingRequests.delete(id);
-          reject(new Error('Request timeout'));
-        }
-      }, 5000);
-    });
+    await this.request<null>('setState', { storeId, state, expectedVersion: options?.expectedVersion });
   }
   
   async dispatch(storeId: string, action: { type: string; payload?: unknown }): Promise<void> {
-    const id = ++this.requestId;
-    
-    return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
-      this.send({
-        id,
-        method: 'dispatch',
-        params: { storeId, action },
-      });
-      
-      setTimeout(() => {
-        if (this.pendingRequests.has(id)) {
-          this.pendingRequests.delete(id);
-          reject(new Error('Request timeout'));
-        }
-      }, 5000);
-    });
+    await this.request<null>('dispatch', { storeId, action });
   }
   
   disconnect(): void {

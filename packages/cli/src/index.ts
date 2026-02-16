@@ -4,6 +4,7 @@ import consola from 'consola';
 import { initCommand } from './commands/init.js';
 import { startCommand } from './commands/start.js';
 import { stopCommand } from './commands/stop.js';
+import { restartCommand } from './commands/restart.js';
 import { statusCommand } from './commands/status.js';
 import { lsCommand } from './commands/ls.js';
 import { inspectCommand } from './commands/inspect.js';
@@ -12,7 +13,8 @@ import { execCommand } from './commands/exec.js';
 import { addPageCommand } from './commands/add-page.js';
 import { rmPageCommand } from './commands/rm-page.js';
 import { componentsCommand } from './commands/components.js';
-import { addCommand } from './commands/add.js';
+import { doctorCommand } from './commands/doctor.js';
+import { resetCommand } from './commands/reset.js';
 
 const program = new Command();
 
@@ -25,6 +27,7 @@ program
 program.addCommand(initCommand);
 program.addCommand(startCommand);
 program.addCommand(stopCommand);
+program.addCommand(restartCommand);
 program.addCommand(statusCommand);
 program.addCommand(lsCommand);
 program.addCommand(inspectCommand);
@@ -33,7 +36,8 @@ program.addCommand(execCommand);
 program.addCommand(addPageCommand);
 program.addCommand(rmPageCommand);
 program.addCommand(componentsCommand);
-program.addCommand(addCommand);
+program.addCommand(doctorCommand);
+program.addCommand(resetCommand);
 
 // 错误处理
 program.exitOverride();

@@ -2,13 +2,27 @@ import { Command } from 'commander';
 import consola from 'consola';
 import c from 'picocolors';
 import { BridgeClient } from '@agentstage/bridge/sdk';
+import { readRuntimeConfig, isInitialized } from '../utils/paths.js';
 
 export const watchCommand = new Command('watch')
   .description('Watch a page for real-time changes')
   .argument('<page>', 'Page ID')
   .action(async (pageId) => {
     try {
-      const client = new BridgeClient('ws://localhost:8787/_bridge');
+      // 1. 检查是否已初始化
+      if (!isInitialized()) {
+        consola.error('Project not initialized. Please run `agentstage init` first.');
+        process.exit(1);
+      }
+
+      // 2. 检查是否已启动
+      const config = await readRuntimeConfig();
+      if (!config) {
+        consola.error('Runtime is not running. Please run `agentstage start` first.');
+        process.exit(1);
+      }
+
+      const client = new BridgeClient(`ws://localhost:${config.port}/_bridge`);
       
       client.onEvent((event) => {
         const timestamp = new Date().toISOString();

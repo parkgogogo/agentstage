@@ -62,14 +62,102 @@ export async function getPidFile(): Promise<string> {
  */
 export async function getPagesDir(): Promise<string> {
   const workspace = await getWorkspaceDir();
-  
-  if (existsSync(join(workspace, 'app', 'routes', 'pages'))) {
-    return join(workspace, 'app', 'routes', 'pages');
-  }
-  
+
+  // Vite template structure
   if (existsSync(join(workspace, 'src', 'pages'))) {
     return join(workspace, 'src', 'pages');
   }
-  
-  throw new Error('Pages directory not found');
+
+  // Legacy TanStack Start structure (for backwards compatibility)
+  if (existsSync(join(workspace, 'src', 'routes', 'pages'))) {
+    return join(workspace, 'src', 'routes', 'pages');
+  }
+
+  if (existsSync(join(workspace, 'app', 'routes', 'pages'))) {
+    return join(workspace, 'app', 'routes', 'pages');
+  }
+
+  throw new Error('Pages directory not found at src/pages');
 }
+
+// 运行时配置文件路径
+export async function getRuntimeConfigFile(): Promise<string> {
+  const workspace = await getWorkspaceDir();
+  return join(workspace, '.agentstage', 'runtime.json');
+}
+
+// 运行时配置接口
+export interface RuntimeConfig {
+  pid: number;
+  port: number;
+  startedAt: string;
+}
+
+/**
+ * 读取运行时配置
+ */
+export async function readRuntimeConfig(): Promise<RuntimeConfig | null> {
+  const configFile = await getRuntimeConfigFile();
+  if (!existsSync(configFile)) {
+    return null;
+  }
+  try {
+    const content = await readFile(configFile, 'utf8');
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 保存运行时配置
+ */
+export async function saveRuntimeConfig(config: RuntimeConfig): Promise<void> {
+  const configFile = await getRuntimeConfigFile();
+  await mkdir(join(configFile, '..'), { recursive: true });
+  await writeFile(configFile, JSON.stringify(config, null, 2));
+}
+
+/**
+ * 删除运行时配置
+ */
+export async function removeRuntimeConfig(): Promise<void> {
+  const configFile = await getRuntimeConfigFile();
+  if (existsSync(configFile)) {
+    await writeFile(configFile, ''); // 清空而不是删除，便于检查
+  }
+}
+
+/**
+ * 检查是否已初始化
+ */
+export function isInitialized(): boolean {
+  // 检查配置文件是否存在
+  if (!existsSync(WORKSPACE_FILE)) {
+    return false;
+  }
+  try {
+    const workspace = readFileSync(WORKSPACE_FILE, 'utf8');
+    // 检查工作目录是否有 package.json（项目标志）
+    return existsSync(join(workspace.trim(), 'package.json'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 检查服务是否正在运行
+ */
+export async function isRunning(): Promise<boolean> {
+  const config = await readRuntimeConfig();
+  if (!config) return false;
+
+  try {
+    process.kill(config.pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+import { readFileSync } from 'fs';

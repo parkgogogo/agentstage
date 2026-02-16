@@ -1,5 +1,6 @@
 import { WebSocket, WebSocketServer } from 'ws';
-import type { IncomingMessage } from 'http';
+import type { IncomingMessage, Server } from 'http';
+import type { Http2SecureServer } from 'http2';
 import type {
   Gateway,
   GatewayOptions,
@@ -32,6 +33,11 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
     }
     registry.cleanup();
   }, 30000);
+
+  // Helper function to register a store (used by server route)
+  function registerStore(store: RegisteredStore): void {
+    registry.register(store);
+  }
 
   function handleBrowserMessage(ws: WebSocket, data: string): void {
     try {
@@ -116,6 +122,70 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
   function handleClientMessage(ws: WebSocket, data: string): void {
     try {
       const msg = JSON.parse(data);
+
+      // JSON-RPC style requests from SDK/CLI
+      if (typeof msg?.id === 'number' && typeof msg?.method === 'string') {
+        const id: number = msg.id;
+        const method: string = msg.method;
+        const params: unknown = msg.params;
+
+        (async () => {
+          try {
+            switch (method) {
+              case 'listStores': {
+                ws.send(JSON.stringify({ id, result: gateway.listStores() }));
+                return;
+              }
+
+              case 'describe': {
+                const storeId = (params as { storeId?: unknown } | null)?.storeId;
+                if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
+                const description = gateway.getDescription(storeId) ?? null;
+                ws.send(JSON.stringify({ id, result: description }));
+                return;
+              }
+
+              case 'getState': {
+                const storeId = (params as { storeId?: unknown } | null)?.storeId;
+                if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
+                const state = gateway.getState(storeId) ?? null;
+                ws.send(JSON.stringify({ id, result: state }));
+                return;
+              }
+
+              case 'setState': {
+                const p = params as { storeId?: unknown; state?: unknown; expectedVersion?: unknown } | null;
+                const storeId = p?.storeId;
+                if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
+                await gateway.setState(storeId, p?.state, {
+                  expectedVersion: typeof p?.expectedVersion === 'number' ? p.expectedVersion : undefined,
+                });
+                ws.send(JSON.stringify({ id, result: null }));
+                return;
+              }
+
+              case 'dispatch': {
+                const p = params as { storeId?: unknown; action?: unknown } | null;
+                const storeId = p?.storeId;
+                if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
+                const action = p?.action as { type?: unknown; payload?: unknown } | undefined;
+                if (!action || typeof action.type !== 'string') throw new Error('Invalid params: action');
+                await gateway.dispatch(storeId, { type: action.type, payload: action.payload });
+                ws.send(JSON.stringify({ id, result: null }));
+                return;
+              }
+
+              default:
+                throw new Error(`Unknown method: ${method}`);
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            ws.send(JSON.stringify({ id, error: { message } }));
+          }
+        })();
+
+        return;
+      }
 
       if (msg.type === 'subscribe' && msg.payload?.storeId) {
         const unsubscribe = registry.addSubscriber(msg.payload.storeId, ws);
@@ -232,10 +302,28 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
 
       return unsubscribe;
     },
-  };
 
-  (gateway as unknown as { attach: (server: unknown) => unknown }).attach = (server: unknown) => {
-    const wss = new WebSocketServer({ server: server as import('http').Server, path: wsPath });
+    attach(server: Server | Http2SecureServer) {
+      // 使用 noServer: true 避免干扰 HTTP server 的 upgrade 事件
+      // 手动监听 upgrade 事件，只处理 /_bridge 路径
+      const wss = new WebSocketServer({ noServer: true });
+
+      const httpServer = server as Server;
+
+      // 添加我们的 upgrade 处理器（使用 prependListener 确保先处理）
+      httpServer.prependListener('upgrade', (request, socket, head) => {
+        const pathname = request.url?.split('?')[0] || '/';
+
+        if (pathname === wsPath) {
+          // 处理 /_bridge 路径的 WebSocket 连接
+          wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit('connection', ws, request);
+          });
+          // 不再传递此事件给其他监听器
+          return;
+        }
+        // 其他路径让其他监听器处理
+      });
 
     wss.on('connection', (ws, req: IncomingMessage) => {
       const url = new URL(req.url || '/', `http://${req.headers.host}`);
@@ -273,14 +361,15 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
       });
     });
 
-    return wss;
-  };
+      return wss;
+    },
 
-  (gateway as unknown as { destroy: () => void }).destroy = () => {
-    clearInterval(cleanupInterval);
-    for (const store of registry.list()) {
-      registry.disconnect(store.id, 'server_shutdown');
-    }
+    destroy() {
+      clearInterval(cleanupInterval);
+      for (const store of registry.list()) {
+        registry.disconnect(store.id, 'server_shutdown');
+      }
+    },
   };
 
   return gateway;
