@@ -5,17 +5,29 @@ import type { StoreDescription, GatewayMessage } from '../shared/types.js';
 
 const WS_PATH = '/_bridge';
 
+// Debug: Intercept WebSocket to log actual URL
+const OriginalWebSocket = window.WebSocket;
+(window as any).WebSocket = function(url: string | URL, protocols?: string | string[]) {
+  console.log('[BridgeStore] WebSocket constructed with URL:', url);
+  (window as any).__lastWsUrl = String(url);
+  return new OriginalWebSocket(url, protocols);
+};
+
 function generateStoreId(pageId: string): string {
   const random = Math.random().toString(36).substring(2, 10);
   return `${pageId}#${random}`;
 }
 
 function getGatewayUrl(): string {
+  console.log('[BridgeStore] getGatewayUrl called');
   if (typeof window === 'undefined') {
+    console.log('[BridgeStore] window is undefined');
     return '';
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}${WS_PATH}?type=browser`;
+  const url = `${protocol}//${window.location.host}${WS_PATH}?type=browser`;
+  console.log('[BridgeStore] Generated URL:', url);
+  return url;
 }
 
 export function createBridgeStore<
@@ -110,8 +122,12 @@ export function createBridgeStore<
         case 'client.dispatch': {
           const { action } = msg.payload;
           const current = store.getState();
+          console.log('[BridgeStore] dispatch received:', action, 'has dispatch fn:', typeof (current as any).dispatch === 'function');
           if (typeof (current as any).dispatch === 'function') {
             (current as any).dispatch(action);
+            console.log('[BridgeStore] dispatch executed');
+          } else {
+            console.warn('[BridgeStore] No dispatch function in state');
           }
           break;
         }
@@ -161,6 +177,8 @@ export function createBridgeStore<
           return;
         }
 
+        console.log('[BridgeStore] Connecting to:', url);
+        (window as any).__bridgeDebug = { wsUrl: url };
         ws = new WebSocket(url);
         
         ws.onopen = () => {

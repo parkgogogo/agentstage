@@ -11,6 +11,7 @@ import type {
   StoreId
 } from './types.js';
 import { StoreRegistry } from './registry.js';
+import { logger } from '../utils/logger.js';
 
 const DEFAULT_WS_PATH = '/_bridge';
 const DEFAULT_HEARTBEAT_TIMEOUT = 60000;
@@ -26,7 +27,7 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
     const now = Date.now();
     for (const [id, last] of lastHeartbeat) {
       if (now - last > heartbeatTimeout) {
-        console.log(`[Gateway] Store ${id} timed out`);
+        logger.info(`[Gateway] Store ${id} timed out`);
         registry.disconnect(id, 'timeout');
         lastHeartbeat.delete(id);
       }
@@ -34,14 +35,18 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
     registry.cleanup();
   }, 30000);
 
+  logger.info('[Gateway] Created new gateway instance');
+
   // Helper function to register a store (used by server route)
   function registerStore(store: RegisteredStore): void {
     registry.register(store);
   }
 
   function handleBrowserMessage(ws: WebSocket, data: string): void {
+    logger.wsMessage('in', 'browser', data);
     try {
       const msg = JSON.parse(data) as BrowserMessage;
+      logger.debug('[Gateway] Browser message received', { type: msg.type });
 
       switch (msg.type) {
         case 'store.register': {
@@ -63,7 +68,7 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
           registry.register(store);
           lastHeartbeat.set(storeId, Date.now());
 
-          console.log(`[Gateway] Store registered: ${storeId} (${pageId}:${storeKey})`);
+          logger.info(`[Gateway] Store registered: ${storeId} (${pageId}:${storeKey})`);
           break;
         }
 
@@ -120,8 +125,10 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
   }
 
   function handleClientMessage(ws: WebSocket, data: string): void {
+    logger.wsMessage('in', 'client', data);
     try {
       const msg = JSON.parse(data);
+      logger.debug('[Gateway] Client message received', { msg });
 
       // JSON-RPC style requests from SDK/CLI
       if (typeof msg?.id === 'number' && typeof msg?.method === 'string') {
@@ -129,17 +136,23 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
         const method: string = msg.method;
         const params: unknown = msg.params;
 
+        logger.debug('[Gateway] JSON-RPC request', { id, method, params });
+
         (async () => {
           try {
             switch (method) {
               case 'listStores': {
-                ws.send(JSON.stringify({ id, result: gateway.listStores() }));
+                logger.debug('[Gateway] listStores called');
+                const result = gateway.listStores();
+                logger.debug('[Gateway] listStores result', { count: result.length });
+                ws.send(JSON.stringify({ id, result }));
                 return;
               }
 
               case 'describe': {
                 const storeId = (params as { storeId?: unknown } | null)?.storeId;
                 if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
+                logger.debug('[Gateway] describe called', { storeId });
                 const description = gateway.getDescription(storeId) ?? null;
                 ws.send(JSON.stringify({ id, result: description }));
                 return;
@@ -148,6 +161,7 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
               case 'getState': {
                 const storeId = (params as { storeId?: unknown } | null)?.storeId;
                 if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
+                logger.debug('[Gateway] getState called', { storeId });
                 const state = gateway.getState(storeId) ?? null;
                 ws.send(JSON.stringify({ id, result: state }));
                 return;
@@ -157,10 +171,12 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
                 const p = params as { storeId?: unknown; state?: unknown; expectedVersion?: unknown } | null;
                 const storeId = p?.storeId;
                 if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
+                logger.info('[Gateway] setState called', { storeId, state: p?.state });
                 await gateway.setState(storeId, p?.state, {
                   expectedVersion: typeof p?.expectedVersion === 'number' ? p.expectedVersion : undefined,
                 });
                 ws.send(JSON.stringify({ id, result: null }));
+                logger.info('[Gateway] setState completed', { storeId });
                 return;
               }
 
@@ -170,8 +186,10 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
                 if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
                 const action = p?.action as { type?: unknown; payload?: unknown } | undefined;
                 if (!action || typeof action.type !== 'string') throw new Error('Invalid params: action');
+                logger.info('[Gateway] dispatch called', { storeId, action });
                 await gateway.dispatch(storeId, { type: action.type, payload: action.payload });
                 ws.send(JSON.stringify({ id, result: null }));
+                logger.info('[Gateway] dispatch completed', { storeId });
                 return;
               }
 
@@ -180,6 +198,7 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            logger.error('[Gateway] JSON-RPC error', { id, message });
             ws.send(JSON.stringify({ id, error: { message } }));
           }
         })();
@@ -188,6 +207,7 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
       }
 
       if (msg.type === 'subscribe' && msg.payload?.storeId) {
+        logger.debug('[Gateway] Subscribe request', { storeId: msg.payload.storeId });
         const unsubscribe = registry.addSubscriber(msg.payload.storeId, ws);
         (ws as unknown as { _unsubscribe: () => void })._unsubscribe = unsubscribe;
 
@@ -198,32 +218,45 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
       }
 
       if (msg.type === 'unsubscribe' && msg.payload?.storeId) {
+        logger.debug('[Gateway] Unsubscribe request', { storeId: msg.payload.storeId });
         const store = registry.get(msg.payload.storeId);
         if (store) {
           store.subscribers.delete(ws);
         }
       }
     } catch (err) {
-      console.error('[Gateway] Failed to handle client message:', err);
+      logger.error('[Gateway] Failed to handle client message:', err);
     }
   }
 
   function sendToBrowser(storeId: StoreId, message: ClientMessage): Promise<void> {
     return new Promise((resolve, reject) => {
       const store = registry.get(storeId);
+      logger.debug('[Gateway] sendToBrowser', { storeId, messageType: message.type, storeExists: !!store });
+
       if (!store) {
+        logger.error('[Gateway] Store not found', { storeId });
         reject(new Error(`Store not found: ${storeId}`));
         return;
       }
 
       if (store.ws.readyState !== WebSocket.OPEN) {
+        logger.error('[Gateway] Store WebSocket not open', { storeId, readyState: store.ws.readyState });
         reject(new Error(`Store not connected: ${storeId}`));
         return;
       }
 
-      store.ws.send(JSON.stringify(message), (err) => {
-        if (err) reject(err);
-        else resolve();
+      const data = JSON.stringify(message);
+      logger.wsMessage('out', 'browser', data);
+
+      store.ws.send(data, (err) => {
+        if (err) {
+          logger.error('[Gateway] Failed to send to browser', { storeId, error: err.message });
+          reject(err);
+        } else {
+          logger.debug('[Gateway] Message sent to browser', { storeId, messageType: message.type });
+          resolve();
+        }
       });
     });
   }
@@ -237,7 +270,9 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
     },
 
     listStores() {
-      return registry.list().map(s => ({
+      const stores = registry.list();
+      logger.info('[Gateway] listStores called, returning:', { count: stores.length, stores: stores.map(s => ({ id: s.id, pageId: s.pageId })) });
+      return stores.map(s => ({
         id: s.id,
         pageId: s.pageId,
         storeKey: s.storeKey,
@@ -310,11 +345,14 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
 
       const httpServer = server as Server;
 
+      logger.info('[Gateway] Attaching to HTTP server', { wsPath });
+
       // 添加我们的 upgrade 处理器（使用 prependListener 确保先处理）
       httpServer.prependListener('upgrade', (request, socket, head) => {
         const pathname = request.url?.split('?')[0] || '/';
 
         if (pathname === wsPath) {
+          logger.debug('[Gateway] Handling WebSocket upgrade', { url: request.url });
           // 处理 /_bridge 路径的 WebSocket 连接
           wss.handleUpgrade(request, socket, head, (ws) => {
             wss.emit('connection', ws, request);
@@ -326,13 +364,34 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
       });
 
     wss.on('connection', (ws, req: IncomingMessage) => {
-      const url = new URL(req.url || '/', `http://${req.headers.host}`);
-      const clientType = url.searchParams.get('type') || 'unknown';
+      // Client type detection: we'll determine based on the first message
+      // Browser sends: store.register, store.stateChanged, store.heartbeat
+      // Client (CLI/SDK) sends: JSON-RPC requests or subscribe/unsubscribe
+      let clientType: 'browser' | 'client' | 'unknown' = 'unknown';
 
-      console.log(`[Gateway] Connection from ${clientType}: ${req.socket.remoteAddress}`);
+      logger.info(`[Gateway] New WebSocket connection`, { ip: req.socket.remoteAddress, url: req.url });
 
       ws.on('message', (data) => {
         const str = data.toString('utf8');
+
+        // Auto-detect client type on first message if unknown
+        if (clientType === 'unknown') {
+          try {
+            const msg = JSON.parse(str);
+            if (msg.type?.startsWith('store.')) {
+              clientType = 'browser';
+              logger.info(`[Gateway] Auto-detected client as browser (message type: ${msg.type})`);
+            } else if (msg.id !== undefined && msg.method) {
+              clientType = 'client';
+              logger.info(`[Gateway] Auto-detected client as SDK/CLI (method: ${msg.method})`);
+            } else if (msg.type === 'subscribe' || msg.type === 'unsubscribe') {
+              clientType = 'client';
+              logger.info(`[Gateway] Auto-detected client as SDK/CLI (type: ${msg.type})`);
+            }
+          } catch {
+            // Not JSON, treat as unknown
+          }
+        }
 
         if (clientType === 'browser') {
           handleBrowserMessage(ws, str);
@@ -342,8 +401,10 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
       });
 
       ws.on('close', () => {
+        logger.info(`[Gateway] Connection closed`, { clientType });
         for (const store of registry.list()) {
           if (store.ws === ws) {
+            logger.info(`[Gateway] Store disconnected`, { storeId: store.id });
             registry.disconnect(store.id, 'connection_closed');
             lastHeartbeat.delete(store.id);
             break;
@@ -357,7 +418,7 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
       });
 
       ws.on('error', (err) => {
-        console.error('[Gateway] WebSocket error:', err);
+        logger.error('[Gateway] WebSocket error:', err);
       });
     });
 

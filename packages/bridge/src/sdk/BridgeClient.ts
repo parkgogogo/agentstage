@@ -43,8 +43,9 @@ export class BridgeClient {
   
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      console.log('[BridgeClient] Connecting to:', this.url + '?type=client');
       this.ws = new WebSocket(this.url + '?type=client');
-      
+
       this.ws.on('open', () => {
         console.log('[BridgeClient] Connected');
         this.reconnectAttempts = 0;

@@ -29,10 +29,12 @@ export const execCommand = new Command('exec')
 
       // 查找 page 对应的 store
       const stores = await client.listStores();
+      consola.info(`Found ${stores.length} stores:`, stores.map(s => `${s.pageId}:${s.storeKey} (${s.id})`));
       const store = stores.find(s => s.pageId === pageId && s.storeKey === 'main');
 
       if (!store) {
         consola.error(`Page "${pageId}" not found`);
+        consola.info('Available pages:', stores.map(s => s.pageId));
         client.disconnect();
         process.exit(1);
       }
