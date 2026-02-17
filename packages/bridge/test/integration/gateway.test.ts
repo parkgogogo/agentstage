@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest';
 import { createServer } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { createBridgeGateway } from '../../src/gateway/createBridgeGateway.js';
-import { StoreRegistry } from '../../src/gateway/registry.js';
 import type { Gateway } from '../../src/gateway/types.js';
 import getPort from 'get-port';
 
@@ -11,27 +13,36 @@ describe('Gateway + Registry Integration', () => {
   let server: ReturnType<typeof createServer>;
   let wss: WebSocketServer;
   let port: number;
-  
+  let tempDir: string;
+
   beforeAll(async () => {
-    gateway = createBridgeGateway() as any;
+    tempDir = mkdtempSync(join(tmpdir(), 'bridge-integration-'));
+    gateway = createBridgeGateway({ pagesDir: tempDir }) as any;
     server = createServer();
     wss = gateway.attach(server);
     port = await getPort();
     await new Promise<void>((resolve) => server.listen(port, resolve));
   });
-  
+
   afterAll(() => {
     gateway.destroy();
     wss.close();
     server.close();
+    // Clean up temp directory
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
   });
-  
-  beforeEach(() => {
-    // Clear all stores between tests
-    const registry = (gateway as any).registry as StoreRegistry;
-    for (const store of registry.list()) {
-      registry.disconnect(store.id, 'test_cleanup');
+
+  beforeEach(async () => {
+    // Clear all stores between tests by disconnecting all connected stores
+    for (const store of gateway.listStores()) {
+      const ws = gateway.getStore(store.id)?.ws;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
     }
+    await new Promise(r => setTimeout(r, 50));
   });
   
   describe('full lifecycle', () => {
@@ -191,7 +202,7 @@ describe('Gateway + Registry Integration', () => {
       await new Promise(r => setTimeout(r, 50));
       
       expect(gateway.getStore('page#old')).toBeDefined();
-      expect(gateway.find('test-page', 'main')?.id).toBe('page#old');
+      expect(gateway.findStore('test-page', 'main')?.id).toBe('page#old');
       
       // 2. Page refreshes (new tab connects with same pageId+storeKey)
       const browser2 = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
@@ -218,7 +229,7 @@ describe('Gateway + Registry Integration', () => {
       // Old store should be replaced
       expect(gateway.getStore('page#old')).toBeUndefined();
       expect(gateway.getStore('page#new')).toBeDefined();
-      expect(gateway.find('test-page', 'main')?.id).toBe('page#new');
+      expect(gateway.findStore('test-page', 'main')?.id).toBe('page#new');
       
       browser1.close();
       browser2.close();
@@ -228,21 +239,22 @@ describe('Gateway + Registry Integration', () => {
       // 1. Browser registers
       const browserWs = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
       const browserMessages: unknown[] = [];
-      
+
       await new Promise<void>((resolve) => browserWs.on('open', resolve));
-      
+
       browserWs.on('message', (data) => {
         browserMessages.push(JSON.parse(data.toString()));
       });
-      
+
+      // Use unique IDs to avoid file storage pollution from other tests
       browserWs.send(JSON.stringify({
         type: 'store.register',
         payload: {
-          storeId: 'page#test123',
-          pageId: 'test-page',
+          storeId: 'page#setstate-test',
+          pageId: 'setstate-test-page',
           storeKey: 'main',
           description: {
-            pageId: 'test-page',
+            pageId: 'setstate-test-page',
             storeKey: 'main',
             schema: { type: 'object' },
             actions: {},
@@ -250,21 +262,22 @@ describe('Gateway + Registry Integration', () => {
           initialState: { count: 0 },
         },
       }));
-      
+
       await new Promise(r => setTimeout(r, 50));
-      
+
       // 2. Call gateway.setState
-      await gateway.setState('page#test123', { count: 42 });
-      
+      await gateway.setState('page#setstate-test', { count: 42 });
+
       await new Promise(r => setTimeout(r, 50));
-      
-      // 3. Browser should receive setState message
-      const setStateMsg = browserMessages.find(
+
+      // 3. Browser should receive setState message (filter out the initial file-based setState)
+      const setStateMsgs = browserMessages.filter(
         m => (m as any).type === 'client.setState'
       );
-      expect(setStateMsg).toBeDefined();
-      expect((setStateMsg as any).payload.state).toEqual({ count: 42 });
-      
+      expect(setStateMsgs.length).toBeGreaterThanOrEqual(1);
+      // The last setState should be from gateway.setState
+      expect((setStateMsgs[setStateMsgs.length - 1] as any).payload.state).toEqual({ count: 42 });
+
       browserWs.close();
     });
     

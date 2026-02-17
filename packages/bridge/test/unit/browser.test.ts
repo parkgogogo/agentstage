@@ -15,34 +15,55 @@ class MockWebSocket {
   static OPEN = 1;
   static CLOSING = 2;
   static CLOSED = 3;
-  
+
   public readyState = 0;
   public sentMessages: string[] = [];
   private listeners: Record<string, ((data: any) => void)[]> = {};
-  
+
+  // Support both onopen/onmessage/onclose/onerror setters and addEventListener
+  public onopen: (() => void) | null = null;
+  public onmessage: ((event: { data: string }) => void) | null = null;
+  public onclose: (() => void) | null = null;
+  public onerror: ((err: any) => void) | null = null;
+
   constructor(public url: string) {
-    setTimeout(() => {
+    // Simulate async open
+    queueMicrotask(() => {
       this.readyState = 1;
+      if (this.onopen) this.onopen();
       this.emit('open');
-    }, 0);
+
+      // Simulate receiving client.setState (hydration) message
+      queueMicrotask(() => {
+        if (this.onmessage) {
+          this.onmessage({
+            data: JSON.stringify({
+              type: 'client.setState',
+              payload: { state: { count: 0 }, expectedVersion: undefined }
+            })
+          });
+        }
+      });
+    });
   }
-  
+
   send(data: string): void {
     this.sentMessages.push(data);
   }
-  
+
   close(): void {
     this.readyState = 3;
+    if (this.onclose) this.onclose();
     this.emit('close');
   }
-  
+
   addEventListener(event: string, handler: (data: any) => void): void {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
     this.listeners[event].push(handler);
   }
-  
+
   emit(event: string, data?: any): void {
     this.listeners[event]?.forEach(h => h(data));
   }
@@ -52,14 +73,6 @@ global.WebSocket = MockWebSocket as any;
 
 describe('createBridgeStore', () => {
   const schema = z.object({ count: z.number() });
-  
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  
-  afterEach(() => {
-    vi.useRealTimers();
-  });
   
   describe('store creation', () => {
     it('should create zustand store with initial state', () => {

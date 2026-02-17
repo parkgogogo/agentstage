@@ -5,13 +5,19 @@ import type { StoreDescription, GatewayMessage } from '../shared/types.js';
 
 const WS_PATH = '/_bridge';
 
-// Debug: Intercept WebSocket to log actual URL
-const OriginalWebSocket = window.WebSocket;
-(window as any).WebSocket = function(url: string | URL, protocols?: string | string[]) {
-  console.log('[BridgeStore] WebSocket constructed with URL:', url);
-  (window as any).__lastWsUrl = String(url);
-  return new OriginalWebSocket(url, protocols);
-};
+// Debug: Intercept WebSocket to log actual URL (only in browser)
+let wsIntercepted = false;
+function interceptWebSocket(): void {
+  if (wsIntercepted || typeof window === 'undefined') return;
+  wsIntercepted = true;
+  
+  const OriginalWebSocket = window.WebSocket;
+  (window as any).WebSocket = function(url: string | URL, protocols?: string | string[]) {
+    console.log('[BridgeStore] WebSocket constructed with URL:', url);
+    (window as any).__lastWsUrl = String(url);
+    return new OriginalWebSocket(url, protocols);
+  };
+}
 
 function generateStoreId(pageId: string): string {
   const random = Math.random().toString(36).substring(2, 10);
@@ -39,14 +45,14 @@ export function createBridgeStore<
   const gatewayUrl = options.gatewayUrl;
   const storeKey = options.storeKey || 'main';
   const storeId = generateStoreId(options.pageId);
-  
-  const store = createStore<TState>((set, get) => 
+
+  const store = createStore<TState>((set, get) =>
     options.createState(
       (fn) => set(fn(get())),
       get
     )
   );
-  
+
   const description: StoreDescription = {
     pageId: options.pageId,
     storeKey,
@@ -56,19 +62,19 @@ export function createBridgeStore<
         key,
         {
           description: def.description,
-          payload: def.payload 
+          payload: def.payload
             ? zodToJsonSchema(def.payload, { name: `${key}Payload` })
             : undefined,
         },
       ])
     ),
-    events: options.description.events 
+    events: options.description.events
       ? Object.fromEntries(
           Object.entries(options.description.events).map(([key, def]) => [
             key,
             {
               description: def.description,
-              payload: def.payload 
+              payload: def.payload
                 ? zodToJsonSchema(def.payload, { name: `${key}Payload` })
                 : undefined,
             },
@@ -76,31 +82,34 @@ export function createBridgeStore<
         )
       : undefined,
   };
-  
+
   let ws: WebSocket | null = null;
   let version = 0;
   let isConnected = false;
+  let isHydrated = false;
+  let resolveHydration: (() => void) | null = null;
+  let hydrationPromise: Promise<void> | null = null;
   let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-  
+
   function send(message: GatewayMessage) {
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(message));
     }
   }
-  
+
   function startHeartbeat() {
     heartbeatInterval = setInterval(() => {
       send({ type: 'store.heartbeat' });
     }, 30000);
   }
-  
+
   function stopHeartbeat() {
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       heartbeatInterval = null;
     }
   }
-  
+
   function handleGatewayMessage(data: string) {
     try {
       const msg = JSON.parse(data);
@@ -116,9 +125,16 @@ export function createBridgeStore<
           }
           console.log('[BridgeStore] Calling store.setState with:', state);
           store.setState(state as TState);
+
+          // Mark as hydrated on first setState
+          if (!isHydrated) {
+            isHydrated = true;
+            resolveHydration?.();
+            console.log('[BridgeStore] Hydration complete');
+          }
           break;
         }
-        
+
         case 'client.dispatch': {
           const { action } = msg.payload;
           const current = store.getState();
@@ -131,7 +147,7 @@ export function createBridgeStore<
           }
           break;
         }
-        
+
         case 'client.ping':
           break;
       }
@@ -139,7 +155,7 @@ export function createBridgeStore<
       console.error('[BridgeStore] Failed to handle message:', err);
     }
   }
-  
+
   const unsubscribe = store.subscribe((state) => {
     version += 1;
     send({
@@ -152,24 +168,31 @@ export function createBridgeStore<
       },
     });
   });
-  
+
   return {
     store,
-    
+
     describes() {
       return description;
     },
-    
+
     get isConnected() {
       return isConnected;
     },
-    
+
+    get isHydrated() {
+      return isHydrated;
+    },
+
     connect(): Promise<{ storeId: string; disconnect: () => void }> {
       return new Promise((resolve, reject) => {
         if (ws?.readyState === WebSocket.OPEN) {
           resolve({ storeId, disconnect: () => ws?.close() });
           return;
         }
+
+        // Enable WebSocket interception
+        interceptWebSocket();
 
         const url = gatewayUrl || getGatewayUrl();
         if (!url) {
@@ -180,10 +203,15 @@ export function createBridgeStore<
         console.log('[BridgeStore] Connecting to:', url);
         (window as any).__bridgeDebug = { wsUrl: url };
         ws = new WebSocket(url);
-        
+
         ws.onopen = () => {
           isConnected = true;
-          
+
+          // Create hydration promise - resolves when first client.setState arrives
+          hydrationPromise = new Promise((resolveHydrationFn) => {
+            resolveHydration = resolveHydrationFn;
+          });
+
           send({
             type: 'store.register',
             payload: {
@@ -194,8 +222,15 @@ export function createBridgeStore<
               initialState: store.getState(),
             },
           });
-          
+
           startHeartbeat();
+        };
+
+        // Wait for hydration before resolving connect()
+        const checkHydration = async () => {
+          if (hydrationPromise) {
+            await hydrationPromise;
+          }
           resolve({
             storeId,
             disconnect: () => {
@@ -206,16 +241,17 @@ export function createBridgeStore<
             },
           });
         };
-        
+        checkHydration();
+
         ws.onmessage = (event) => {
           handleGatewayMessage(event.data);
         };
-        
+
         ws.onclose = () => {
           isConnected = false;
           stopHeartbeat();
         };
-        
+
         ws.onerror = (err) => {
           reject(err);
         };

@@ -30,6 +30,7 @@ export interface BridgeStore<TState> {
   describes(): StoreDescription;
   connect(): Promise<{ storeId: string; disconnect: () => void }>;
   readonly isConnected: boolean;
+  readonly isHydrated: boolean;
 }
 
 export type { StoreDescription, StoreState };

@@ -5,18 +5,26 @@ import getPort from 'get-port';
 import { createBridgeGateway } from '../../src/gateway/createBridgeGateway.js';
 import { BridgeClient } from '../../src/sdk/BridgeClient.js';
 
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
 describe('Bridge E2E Tests', () => {
   let gateway: ReturnType<typeof createBridgeGateway> & { 
     attach: (server: any) => WebSocketServer; 
-    destroy: () => void 
+    destroy: () => void;
+    findStore: (pageId: string, storeKey: string) => { id: string } | undefined;
   };
   let server: ReturnType<typeof createServer>;
   let wss: WebSocketServer;
   let port: number;
   let gatewayUrl: string;
+  let tempDir: string;
   
-  beforeAll(async () => {
-    gateway = createBridgeGateway() as any;
+  beforeEach(async () => {
+    // Create a temp directory for each test to isolate file storage
+    tempDir = mkdtempSync(join(tmpdir(), 'bridge-e2e-'));
+    gateway = createBridgeGateway({ pagesDir: tempDir }) as any;
     server = createServer();
     wss = gateway.attach(server);
     port = await getPort();
@@ -24,10 +32,14 @@ describe('Bridge E2E Tests', () => {
     await new Promise<void>((resolve) => server.listen(port, resolve));
   });
   
-  afterAll(() => {
+  afterEach(() => {
     gateway.destroy();
     wss.close();
     server.close();
+    // Clean up temp directory
+    try {
+      rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
   });
   
   describe('Browser store <-> Gateway <-> SDK Client', () => {
@@ -288,8 +300,8 @@ describe('Bridge E2E Tests', () => {
       );
       expect(disconnected).toBeDefined();
       
-      // Gateway.find should return the new store
-      const currentStore = gateway.find('test-page', 'main');
+      // Gateway.findStore should return the new store
+      const currentStore = gateway.findStore('test-page', 'main');
       expect(currentStore?.id).toBe('page#tab2');
       
       browser1.close();

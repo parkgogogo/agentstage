@@ -11,6 +11,7 @@ import type {
   StoreId
 } from './types.js';
 import { StoreRegistry } from './registry.js';
+import { FileStore } from './fileStore.js';
 import { logger } from '../utils/logger.js';
 
 const DEFAULT_WS_PATH = '/_bridge';
@@ -19,9 +20,12 @@ const DEFAULT_HEARTBEAT_TIMEOUT = 60000;
 export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
   const wsPath = options.wsPath || DEFAULT_WS_PATH;
   const heartbeatTimeout = options.heartbeatTimeout || DEFAULT_HEARTBEAT_TIMEOUT;
+  const pagesDir = options.pagesDir || process.cwd();
 
   const registry = new StoreRegistry();
+  const fileStore = new FileStore({ pagesDir });
   const lastHeartbeat = new Map<StoreId, number>();
+  const fileUnsubscribers = new Map<string, () => void>();
 
   const cleanupInterval = setInterval(() => {
     const now = Date.now();
@@ -35,11 +39,57 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
     registry.cleanup();
   }, 30000);
 
-  logger.info('[Gateway] Created new gateway instance');
+  logger.info('[Gateway] Created new gateway instance', { pagesDir });
 
   // Helper function to register a store (used by server route)
   function registerStore(store: RegisteredStore): void {
     registry.register(store);
+  }
+
+  // Setup file watcher for a page - broadcasts file changes to all connected browsers
+  function setupFileWatcher(pageId: string): void {
+    // Clean up existing watcher
+    const existing = fileUnsubscribers.get(pageId);
+    if (existing) {
+      existing();
+      fileUnsubscribers.delete(pageId);
+    }
+
+    const unsubscribe = fileStore.watch(pageId, (data) => {
+      logger.debug('[Gateway] File changed, broadcasting to browsers', { pageId, version: data.version });
+      
+      // Broadcast to all connected browsers for this page
+      const stores = registry.list().filter(s => s.pageId === pageId);
+      for (const store of stores) {
+        const notification: SubscriberMessage = {
+          type: 'store.stateChanged',
+          payload: {
+            storeId: store.id,
+            state: data.state,
+            version: data.version,
+            source: 'file',
+          },
+        };
+
+        // Send to browser
+        if (store.ws.readyState === WebSocket.OPEN) {
+          store.ws.send(JSON.stringify(notification));
+        }
+
+        // Send to subscribers
+        for (const sub of store.subscribers) {
+          if (sub.readyState === WebSocket.OPEN) {
+            sub.send(JSON.stringify(notification));
+          }
+        }
+
+        // Update registry state
+        store.currentState = data.state;
+        store.version = data.version;
+      }
+    });
+
+    fileUnsubscribers.set(pageId, unsubscribe);
   }
 
   function handleBrowserMessage(ws: WebSocket, data: string): void {
@@ -52,46 +102,83 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
         case 'store.register': {
           const { storeId, pageId, storeKey, description, initialState } = msg.payload;
 
-          const store: RegisteredStore = {
-            id: storeId,
-            pageId,
-            storeKey,
-            description,
-            currentState: initialState,
-            version: 0,
-            ws,
-            subscribers: new Set(),
-            connectedAt: new Date(),
-            lastActivity: new Date(),
-          };
+          // Try to load existing state from file
+          fileStore.load(pageId).then((fileData) => {
+            const stateToUse = fileData ? fileData.state : initialState;
+            const versionToUse = fileData ? fileData.version : 0;
 
-          registry.register(store);
-          lastHeartbeat.set(storeId, Date.now());
+            const store: RegisteredStore = {
+              id: storeId,
+              pageId,
+              storeKey,
+              description,
+              currentState: stateToUse,
+              version: versionToUse,
+              ws,
+              subscribers: new Set(),
+              connectedAt: new Date(),
+              lastActivity: new Date(),
+            };
 
-          logger.info(`[Gateway] Store registered: ${storeId} (${pageId}:${storeKey})`);
+            registry.register(store);
+            lastHeartbeat.set(storeId, Date.now());
+
+            // Send initial state to browser (from file or browser's initial)
+            logger.info(`[Gateway] Sending initial state to ${storeId}`, { fromFile: !!fileData });
+            sendToBrowser(storeId, {
+              type: 'client.setState',
+              payload: { state: stateToUse, expectedVersion: undefined },
+            }).catch(err => {
+              logger.error('[Gateway] Failed to send initial state', { storeId, error: err.message });
+            });
+
+            // Setup file watcher for this page
+            setupFileWatcher(pageId);
+
+            logger.info(`[Gateway] Store registered: ${storeId} (${pageId}:${storeKey})`);
+          });
           break;
         }
 
         case 'store.stateChanged': {
           const { storeId, state, version } = msg.payload;
-          registry.updateState(storeId, state, version);
-
           const store = registry.get(storeId);
-          if (store) {
-            const notification: SubscriberMessage = {
-              type: 'store.stateChanged',
-              payload: {
-                storeId,
-                state,
-                version,
-                source: 'browser',
-              },
-            };
+          
+          if (!store) {
+            logger.warn('[Gateway] State change for unknown store', { storeId });
+            break;
+          }
 
-            for (const sub of store.subscribers) {
-              if (sub.readyState === WebSocket.OPEN) {
-                sub.send(JSON.stringify(notification));
-              }
+          // Save to file first (source of truth)
+          fileStore.save(store.pageId, {
+            state,
+            version,
+            updatedAt: new Date().toISOString(),
+            pageId: store.pageId,
+          }).then(() => {
+            logger.debug('[Gateway] State saved to file', { storeId, pageId: store.pageId, version });
+          }).catch(err => {
+            logger.error('[Gateway] Failed to save state to file', { storeId, error: err.message });
+          });
+
+          // Update registry
+          registry.updateState(storeId, state, version);
+          store.lastActivity = new Date();
+
+          // Broadcast to subscribers
+          const notification: SubscriberMessage = {
+            type: 'store.stateChanged',
+            payload: {
+              storeId,
+              state,
+              version,
+              source: 'browser',
+            },
+          };
+
+          for (const sub of store.subscribers) {
+            if (sub.readyState === WebSocket.OPEN) {
+              sub.send(JSON.stringify(notification));
             }
           }
           break;
@@ -159,25 +246,75 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
               }
 
               case 'getState': {
-                const storeId = (params as { storeId?: unknown } | null)?.storeId;
-                if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
-                logger.debug('[Gateway] getState called', { storeId });
-                const state = gateway.getState(storeId) ?? null;
-                ws.send(JSON.stringify({ id, result: state }));
-                return;
+                const p = params as { pageId?: unknown; storeId?: unknown } | null;
+                // Support both pageId (new) and storeId (legacy)
+                const pageId = p?.pageId as string | undefined;
+                const storeId = p?.storeId as string | undefined;
+                
+                logger.debug('[Gateway] getState called', { pageId, storeId });
+                
+                if (pageId) {
+                  // New: get state directly from file
+                  const fileData = await fileStore.load(pageId);
+                  ws.send(JSON.stringify({ id, result: fileData }));
+                  return;
+                }
+                
+                if (storeId) {
+                  // Legacy: get state from registry
+                  const state = gateway.getState(storeId) ?? null;
+                  ws.send(JSON.stringify({ id, result: state }));
+                  return;
+                }
+                
+                throw new Error('Invalid params: need pageId or storeId');
               }
 
               case 'setState': {
-                const p = params as { storeId?: unknown; state?: unknown; expectedVersion?: unknown } | null;
-                const storeId = p?.storeId;
-                if (typeof storeId !== 'string') throw new Error('Invalid params: storeId');
-                logger.info('[Gateway] setState called', { storeId, state: p?.state });
-                await gateway.setState(storeId, p?.state, {
-                  expectedVersion: typeof p?.expectedVersion === 'number' ? p.expectedVersion : undefined,
-                });
-                ws.send(JSON.stringify({ id, result: null }));
-                logger.info('[Gateway] setState completed', { storeId });
-                return;
+                const p = params as { pageId?: unknown; storeId?: unknown; state?: unknown; expectedVersion?: unknown } | null;
+                const pageId = p?.pageId as string | undefined;
+                const storeId = p?.storeId as string | undefined;
+                const state = p?.state;
+                
+                if (pageId) {
+                  // New: write directly to file
+                  logger.info('[Gateway] setState (file) called', { pageId });
+                  const existing = await fileStore.load(pageId);
+                  const newVersion = existing ? existing.version + 1 : 1;
+                  
+                  await fileStore.save(pageId, {
+                    state,
+                    version: newVersion,
+                    updatedAt: new Date().toISOString(),
+                    pageId,
+                  });
+                  
+                  // Notify connected browsers
+                  const stores = registry.list().filter(s => s.pageId === pageId);
+                  for (const store of stores) {
+                    sendToBrowser(store.id, {
+                      type: 'client.setState',
+                      payload: { state, expectedVersion: typeof p?.expectedVersion === 'number' ? p.expectedVersion : undefined },
+                    }).catch(() => {});
+                  }
+                  
+                  ws.send(JSON.stringify({ id, result: { version: newVersion } }));
+                  logger.info('[Gateway] setState (file) completed', { pageId, version: newVersion });
+                  return;
+                }
+                
+                if (storeId) {
+                  // Legacy: use browser-based store
+                  logger.info('[Gateway] setState called', { storeId });
+                  await gateway.setState(storeId, state, {
+                    expectedVersion: typeof p?.expectedVersion === 'number' ? p.expectedVersion : undefined,
+                  });
+                  ws.send(JSON.stringify({ id, result: null }));
+                  logger.info('[Gateway] setState completed', { storeId });
+                  return;
+                }
+                
+                throw new Error('Invalid params: need pageId or storeId');
               }
 
               case 'dispatch': {
@@ -430,6 +567,12 @@ export function createBridgeGateway(options: GatewayOptions = {}): Gateway {
       for (const store of registry.list()) {
         registry.disconnect(store.id, 'server_shutdown');
       }
+      // Clean up file watchers
+      for (const unsubscribe of fileUnsubscribers.values()) {
+        unsubscribe();
+      }
+      fileUnsubscribers.clear();
+      fileStore.destroy();
     },
   };
 

@@ -50,6 +50,7 @@ export interface StoreChangeEvent {
 export interface GatewayOptions {
   wsPath?: string;
   heartbeatTimeout?: number;
+  pagesDir?: string;
 }
 
 export type BrowserMessage =
