@@ -10,8 +10,9 @@ import { getWorkspaceDir, readRuntimeConfig, WORKSPACE_FILE } from '../utils/pat
 
 const PROJECT_NAME = 'webapp';
 
-export const resetCommand = new Command('reset')
-  .description('Reset Agentstage by removing the project and workspace configuration')
+export const cleanupCommand = new Command()
+  .name('cleanup')
+  .description('Clean up Agentstage by removing the project and workspace configuration')
   .option('-y, --yes', 'Skip confirmation', false)
   .action(async (options) => {
     console.log();

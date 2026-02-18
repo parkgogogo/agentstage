@@ -50,6 +50,10 @@ export class StoreRegistry {
     const storeId = this.index.get(key);
     return storeId ? this.stores.get(storeId) : undefined;
   }
+
+  findStoreByKey(pageId: PageId, storeKey: StoreKey): RegisteredStore | undefined {
+    return this.find(pageId, storeKey);
+  }
   
   findByPage(pageId: PageId): RegisteredStore[] {
     const ids = this.byPage.get(pageId);

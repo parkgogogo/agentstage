@@ -22,4 +22,12 @@ export type * from './gateway/types.js';
 export { createBridgeGateway } from './gateway/createBridgeGateway.js';
 export { createBridgeApiHandler } from './gateway/apiHandler.js';
 export { StoreRegistry } from './gateway/registry.js';
+export {
+  FileStore,
+  InvalidPageIdError,
+  VersionConflictError,
+  validatePageId,
+  type FileStoreOptions,
+  type StoreData,
+} from './gateway/fileStore.js';
 export { bridgePlugin } from './vite/index.js';

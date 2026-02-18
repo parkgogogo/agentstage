@@ -1,12 +1,33 @@
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest';
 import { createServer } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync, readdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { createBridgeGateway } from '../../src/gateway/createBridgeGateway.js';
 import type { Gateway } from '../../src/gateway/types.js';
 import getPort from 'get-port';
+
+function attachAutoStateAppliedAck(ws: WebSocket): void {
+  ws.on('message', (data) => {
+    const msg = JSON.parse(data.toString());
+    if (msg.type !== 'client.setState' || !msg.payload?.requestId || !msg.payload?.storeId) {
+      return;
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: 'store.stateApplied',
+        payload: {
+          storeId: msg.payload.storeId,
+          requestId: msg.payload.requestId,
+          status: 'applied',
+          version: typeof msg.payload.version === 'number' ? msg.payload.version : 0,
+        },
+      })
+    );
+  });
+}
 
 describe('Gateway + Registry Integration', () => {
   let gateway: Gateway & { attach: (server: any) => WebSocketServer; destroy: () => void };
@@ -42,13 +63,31 @@ describe('Gateway + Registry Integration', () => {
         ws.close();
       }
     }
+    // Wait longer for all async cleanup to complete
+    await new Promise(r => setTimeout(r, 100));
+    
+    // Clear any remaining stores from registry
+    for (const store of gateway.listStores()) {
+      const ws = gateway.getStore(store.id)?.ws;
+      if (ws) {
+        ws.terminate?.();
+      }
+    }
     await new Promise(r => setTimeout(r, 50));
+    
+    // Clean up files in temp directory between tests
+    try {
+      for (const file of readdirSync(tempDir)) {
+        rmSync(join(tempDir, file), { recursive: true, force: true });
+      }
+    } catch {}
   });
   
   describe('full lifecycle', () => {
     it('should handle complete register -> stateChange -> disconnect flow', async () => {
       // 1. Browser connects and registers
       const browserWs = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
+      attachAutoStateAppliedAck(browserWs);
       
       await new Promise<void>((resolve, reject) => {
         browserWs.on('open', resolve);
@@ -107,10 +146,67 @@ describe('Gateway + Registry Integration', () => {
       // Verify store is removed
       expect(gateway.getStore('page#test123')).toBeUndefined();
     });
+
+    it('should clean up all stores on the same ws when connection closes', async () => {
+      const browserWs = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
+      attachAutoStateAppliedAck(browserWs);
+
+      await new Promise<void>((resolve, reject) => {
+        browserWs.on('open', resolve);
+        browserWs.on('error', reject);
+      });
+
+      browserWs.send(
+        JSON.stringify({
+          type: 'store.register',
+          payload: {
+            storeId: 'page#multi-a',
+            pageId: 'lifecycle-a',
+            storeKey: 'main',
+            description: {
+              pageId: 'lifecycle-a',
+              storeKey: 'main',
+              schema: { type: 'object' },
+              actions: {},
+            },
+            initialState: { count: 1 },
+          },
+        })
+      );
+
+      browserWs.send(
+        JSON.stringify({
+          type: 'store.register',
+          payload: {
+            storeId: 'page#multi-b',
+            pageId: 'lifecycle-b',
+            storeKey: 'main',
+            description: {
+              pageId: 'lifecycle-b',
+              storeKey: 'main',
+              schema: { type: 'object' },
+              actions: {},
+            },
+            initialState: { count: 2 },
+          },
+        })
+      );
+
+      await new Promise((r) => setTimeout(r, 80));
+      expect(gateway.getStore('page#multi-a')).toBeDefined();
+      expect(gateway.getStore('page#multi-b')).toBeDefined();
+
+      browserWs.close();
+      await new Promise((r) => setTimeout(r, 80));
+
+      expect(gateway.getStore('page#multi-a')).toBeUndefined();
+      expect(gateway.getStore('page#multi-b')).toBeUndefined();
+    });
     
     it('should broadcast state changes to subscribers', async () => {
       // 1. Browser registers store
       const browserWs = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
+      attachAutoStateAppliedAck(browserWs);
       await new Promise<void>((resolve) => browserWs.on('open', resolve));
       
       browserWs.send(JSON.stringify({
@@ -134,12 +230,13 @@ describe('Gateway + Registry Integration', () => {
       // 2. Client subscribes to store
       const clientWs = new WebSocket(`ws://localhost:${port}/_bridge?type=client`);
       const receivedMessages: unknown[] = [];
-      
-      await new Promise<void>((resolve) => clientWs.on('open', resolve));
-      
+
+      // Set up message handler BEFORE waiting for open
       clientWs.on('message', (data) => {
         receivedMessages.push(JSON.parse(data.toString()));
       });
+
+      await new Promise<void>((resolve) => clientWs.on('open', resolve));
       
       clientWs.send(JSON.stringify({
         type: 'subscribe',
@@ -166,7 +263,7 @@ describe('Gateway + Registry Integration', () => {
       }));
       
       await new Promise(r => setTimeout(r, 50));
-      
+
       // 4. Client should receive broadcast
       const stateChanged = receivedMessages.find(
         m => (m as any).type === 'store.stateChanged' && (m as any).payload.source === 'browser'
@@ -181,6 +278,7 @@ describe('Gateway + Registry Integration', () => {
     it('should handle page refresh scenario (new store replaces old)', async () => {
       // 1. First browser tab connects
       const browser1 = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
+      attachAutoStateAppliedAck(browser1);
       await new Promise<void>((resolve) => browser1.on('open', resolve));
       
       browser1.send(JSON.stringify({
@@ -206,6 +304,7 @@ describe('Gateway + Registry Integration', () => {
       
       // 2. Page refreshes (new tab connects with same pageId+storeKey)
       const browser2 = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
+      attachAutoStateAppliedAck(browser2);
       await new Promise<void>((resolve) => browser2.on('open', resolve));
       
       browser2.send(JSON.stringify({
@@ -238,6 +337,7 @@ describe('Gateway + Registry Integration', () => {
     it('should handle setState from client to browser', async () => {
       // 1. Browser registers
       const browserWs = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
+      attachAutoStateAppliedAck(browserWs);
       const browserMessages: unknown[] = [];
 
       await new Promise<void>((resolve) => browserWs.on('open', resolve));
@@ -284,6 +384,7 @@ describe('Gateway + Registry Integration', () => {
     it('should handle dispatch from client to browser', async () => {
       // 1. Browser registers
       const browserWs = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
+      attachAutoStateAppliedAck(browserWs);
       const browserMessages: unknown[] = [];
       
       await new Promise<void>((resolve) => browserWs.on('open', resolve));
@@ -328,6 +429,7 @@ describe('Gateway + Registry Integration', () => {
     it('should notify subscribers when store disconnects', async () => {
       // 1. Browser registers
       const browserWs = new WebSocket(`ws://localhost:${port}/_bridge?type=browser`);
+      attachAutoStateAppliedAck(browserWs);
       await new Promise<void>((resolve) => browserWs.on('open', resolve));
       
       browserWs.send(JSON.stringify({

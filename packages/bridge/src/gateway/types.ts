@@ -1,10 +1,26 @@
-import type { IncomingMessage, Server } from 'http';
+import type { Server } from 'http';
 import type WebSocket from 'ws';
-import type { StoreDescription } from '../shared/types.js';
+import type {
+  StoreId,
+  PageId,
+  StoreKey,
+  StoreDescription,
+  StoreChangeEvent,
+  GatewayMessage as BrowserMessage,
+  ServerMessage as ClientMessage,
+  SubscriberMessage,
+  SetStateOptions,
+} from '../shared/types.js';
 
-export type StoreId = string;
-export type PageId = string;
-export type StoreKey = string;
+export type {
+  StoreId,
+  PageId,
+  StoreKey,
+  BrowserMessage,
+  ClientMessage,
+  SubscriberMessage,
+  StoreChangeEvent,
+};
 
 export interface RegisteredStore {
   id: StoreId;
@@ -30,56 +46,20 @@ export interface Gateway {
   }>;
   getStore(id: StoreId): RegisteredStore | undefined;
   findStore(pageId: PageId, storeKey: StoreKey): RegisteredStore | undefined;
+  findStoreByKey(pageId: PageId, storeKey: StoreKey): RegisteredStore | undefined;
   getDescription(id: StoreId): StoreDescription | undefined;
   getState(id: StoreId): { state: unknown; version: number } | undefined;
-  setState(id: StoreId, state: unknown, options?: { expectedVersion?: number }): Promise<void>;
+  setState(id: StoreId, state: unknown, options?: SetStateOptions): Promise<void>;
   dispatch(id: StoreId, action: { type: string; payload?: unknown }): Promise<void>;
   subscribe(id: StoreId, ws: WebSocket, callback?: (event: StoreChangeEvent) => void): () => void;
   attach(server: Server | import('http2').Http2SecureServer): import('ws').WebSocketServer;
   destroy(): void;
 }
 
-export interface StoreChangeEvent {
-  type: 'stateChanged' | 'disconnected';
-  storeId: StoreId;
-  state?: unknown;
-  version?: number;
-  source?: string;
-}
-
 export interface GatewayOptions {
   wsPath?: string;
   heartbeatTimeout?: number;
   pagesDir?: string;
+  ackTimeout?: number;
+  ackRetryCount?: number;
 }
-
-export type BrowserMessage =
-  | { type: 'store.register'; payload: RegisterPayload }
-  | { type: 'store.stateChanged'; payload: StateChangedPayload }
-  | { type: 'store.heartbeat' }
-  | { type: 'store.disconnect' };
-
-interface RegisterPayload {
-  storeId: StoreId;
-  pageId: PageId;
-  storeKey: StoreKey;
-  description: StoreDescription;
-  initialState: unknown;
-}
-
-interface StateChangedPayload {
-  storeId: StoreId;
-  state: unknown;
-  version: number;
-  source: string;
-}
-
-export type ClientMessage =
-  | { type: 'client.setState'; payload: { state: unknown; expectedVersion?: number } }
-  | { type: 'client.dispatch'; payload: { action: { type: string; payload?: unknown } } }
-  | { type: 'client.ping' };
-
-export type SubscriberMessage =
-  | { type: 'store.registered'; payload: { storeId: StoreId; pageId: PageId; storeKey: StoreKey } }
-  | { type: 'store.stateChanged'; payload: { storeId: StoreId; state: unknown; version: number; source: string } }
-  | { type: 'store.disconnected'; payload: { storeId: StoreId; reason: string } };

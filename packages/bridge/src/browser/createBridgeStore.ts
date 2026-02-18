@@ -1,23 +1,9 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { CreateBridgeStoreOptions, BridgeStore } from './types.js';
-import type { StoreDescription, GatewayMessage } from '../shared/types.js';
+import type { StoreDescription, GatewayMessage, ServerMessage } from '../shared/types.js';
 
 const WS_PATH = '/_bridge';
-
-// Debug: Intercept WebSocket to log actual URL (only in browser)
-let wsIntercepted = false;
-function interceptWebSocket(): void {
-  if (wsIntercepted || typeof window === 'undefined') return;
-  wsIntercepted = true;
-  
-  const OriginalWebSocket = window.WebSocket;
-  (window as any).WebSocket = function(url: string | URL, protocols?: string | string[]) {
-    console.log('[BridgeStore] WebSocket constructed with URL:', url);
-    (window as any).__lastWsUrl = String(url);
-    return new OriginalWebSocket(url, protocols);
-  };
-}
 
 function generateStoreId(pageId: string): string {
   const random = Math.random().toString(36).substring(2, 10);
@@ -25,15 +11,11 @@ function generateStoreId(pageId: string): string {
 }
 
 function getGatewayUrl(): string {
-  console.log('[BridgeStore] getGatewayUrl called');
   if (typeof window === 'undefined') {
-    console.log('[BridgeStore] window is undefined');
     return '';
   }
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = `${protocol}//${window.location.host}${WS_PATH}?type=browser`;
-  console.log('[BridgeStore] Generated URL:', url);
-  return url;
+  return `${protocol}//${window.location.host}${WS_PATH}?type=browser`;
 }
 
 export function createBridgeStore<
@@ -90,6 +72,7 @@ export function createBridgeStore<
   let resolveHydration: (() => void) | null = null;
   let hydrationPromise: Promise<void> | null = null;
   let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  let suppressNextPublish = false;
 
   function send(message: GatewayMessage) {
     if (ws?.readyState === WebSocket.OPEN) {
@@ -112,25 +95,62 @@ export function createBridgeStore<
 
   function handleGatewayMessage(data: string) {
     try {
-      const msg = JSON.parse(data);
-      console.log('[BridgeStore] Received message:', msg.type, msg);
+      const msg = JSON.parse(data) as ServerMessage;
 
       switch (msg.type) {
         case 'client.setState': {
-          const { state, expectedVersion } = msg.payload;
-          console.log('[BridgeStore] setState received, expectedVersion:', expectedVersion, 'current version:', version);
+          const { state, expectedVersion, requestId, version: targetVersion } = msg.payload;
+          const canAck = typeof requestId === 'string' && requestId.length > 0;
           if (expectedVersion !== undefined && expectedVersion !== version) {
-            console.warn('[BridgeStore] Version mismatch, ignoring setState');
+            if (canAck) {
+              send({
+                type: 'store.stateApplied',
+                payload: {
+                  storeId,
+                  requestId,
+                  status: 'version_mismatch',
+                  version,
+                },
+              });
+            }
             return;
           }
-          console.log('[BridgeStore] Calling store.setState with:', state);
-          store.setState(state as TState);
+          try {
+            suppressNextPublish = true;
+            store.setState(state as TState);
+            if (typeof targetVersion === 'number') {
+              version = targetVersion;
+            }
+            if (canAck) {
+              send({
+                type: 'store.stateApplied',
+                payload: {
+                  storeId,
+                  requestId,
+                  status: 'applied',
+                  version,
+                },
+              });
+            }
+          } catch (error) {
+            if (canAck) {
+              send({
+                type: 'store.stateApplied',
+                payload: {
+                  storeId,
+                  requestId,
+                  status: 'failed',
+                  version,
+                  error: error instanceof Error ? error.message : String(error),
+                },
+              });
+            }
+          }
 
           // Mark as hydrated on first setState
           if (!isHydrated) {
             isHydrated = true;
             resolveHydration?.();
-            console.log('[BridgeStore] Hydration complete');
           }
           break;
         }
@@ -138,12 +158,8 @@ export function createBridgeStore<
         case 'client.dispatch': {
           const { action } = msg.payload;
           const current = store.getState();
-          console.log('[BridgeStore] dispatch received:', action, 'has dispatch fn:', typeof (current as any).dispatch === 'function');
           if (typeof (current as any).dispatch === 'function') {
             (current as any).dispatch(action);
-            console.log('[BridgeStore] dispatch executed');
-          } else {
-            console.warn('[BridgeStore] No dispatch function in state');
           }
           break;
         }
@@ -157,6 +173,10 @@ export function createBridgeStore<
   }
 
   const unsubscribe = store.subscribe((state) => {
+    if (suppressNextPublish) {
+      suppressNextPublish = false;
+      return;
+    }
     version += 1;
     send({
       type: 'store.stateChanged',
@@ -191,17 +211,12 @@ export function createBridgeStore<
           return;
         }
 
-        // Enable WebSocket interception
-        interceptWebSocket();
-
         const url = gatewayUrl || getGatewayUrl();
         if (!url) {
           reject(new Error('Cannot connect: gatewayUrl not provided and window is not available'));
           return;
         }
 
-        console.log('[BridgeStore] Connecting to:', url);
-        (window as any).__bridgeDebug = { wsUrl: url };
         ws = new WebSocket(url);
 
         ws.onopen = () => {

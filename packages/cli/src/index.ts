@@ -14,7 +14,7 @@ import { addPageCommand } from './commands/add-page.js';
 import { rmPageCommand } from './commands/rm-page.js';
 import { componentsCommand } from './commands/components.js';
 import { doctorCommand } from './commands/doctor.js';
-import { resetCommand } from './commands/reset.js';
+import { cleanupCommand } from './commands/cleanup.js';
 import { verifyCommand } from './commands/verify.js';
 
 const program = new Command();
@@ -38,7 +38,7 @@ program.addCommand(addPageCommand);
 program.addCommand(rmPageCommand);
 program.addCommand(componentsCommand);
 program.addCommand(doctorCommand);
-program.addCommand(resetCommand);
+program.addCommand(cleanupCommand);
 program.addCommand(verifyCommand);
 
 // 错误处理

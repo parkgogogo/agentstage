@@ -1,30 +1,7 @@
 import WebSocket from 'ws';
+import type { BridgeEvent, SetStateOptions, StateSnapshot, StoreDescription, StoreSummary } from '../shared/types.js';
 
-export interface StoreSummary {
-  id: string;
-  pageId: string;
-  storeKey: string;
-  version: number;
-  connectedAt: Date;
-}
-
-export interface StoreDescription {
-  pageId: string;
-  storeKey: string;
-  schema: unknown;
-  actions: Record<string, { description: string; payload?: unknown }>;
-  events?: Record<string, { description: string; payload?: unknown }>;
-}
-
-export interface StateSnapshot {
-  state: unknown;
-  version: number;
-}
-
-export type BridgeEvent =
-  | { type: 'stateChanged'; storeId: string; state: unknown; version: number; source: string }
-  | { type: 'disconnected'; storeId: string; reason: string }
-  | { type: 'connected'; storeId: string; pageId: string; storeKey: string };
+export type { BridgeEvent, StoreDescription, StoreSummary, StateSnapshot };
 
 export class BridgeClient {
   private ws: WebSocket | null = null;
@@ -36,70 +13,65 @@ export class BridgeClient {
   private pendingRequests = new Map<number, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
   private requestId = 0;
   private subscribedStores = new Set<string>();
-  
+
   constructor(url: string) {
     this.url = url;
   }
-  
+
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      console.log('[BridgeClient] Connecting to:', this.url + '?type=client');
       this.ws = new WebSocket(this.url + '?type=client');
 
       this.ws.on('open', () => {
-        console.log('[BridgeClient] Connected');
         this.reconnectAttempts = 0;
-        
+
         for (const storeId of this.subscribedStores) {
           this.send({ type: 'subscribe', payload: { storeId } });
         }
-        
+
         resolve();
       });
-      
+
       this.ws.on('message', (data) => {
         this.handleMessage(data.toString());
       });
-      
+
       this.ws.on('close', () => {
-        console.log('[BridgeClient] Disconnected');
         this.attemptReconnect();
       });
-      
+
       this.ws.on('error', (err) => {
         reject(err);
       });
     });
   }
-  
+
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('[BridgeClient] Max reconnect attempts reached');
       return;
     }
-    
+
     this.reconnectAttempts++;
-    console.log(`[BridgeClient] Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-    
+
     setTimeout(() => {
       this.connect().catch(() => {});
     }, this.reconnectDelay * this.reconnectAttempts);
   }
-  
+
   private send(message: unknown): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     }
   }
-  
+
   private handleMessage(data: string): void {
     try {
       const msg = JSON.parse(data);
-      
+
       if (msg.id !== undefined && this.pendingRequests.has(msg.id)) {
         const pending = this.pendingRequests.get(msg.id)!;
         this.pendingRequests.delete(msg.id);
-        
+
         if (msg.error) {
           pending.reject(new Error(msg.error.message || msg.error));
         } else {
@@ -107,7 +79,7 @@ export class BridgeClient {
         }
         return;
       }
-      
+
       if (msg.type) {
         switch (msg.type) {
           case 'store.stateChanged':
@@ -119,7 +91,7 @@ export class BridgeClient {
               source: msg.payload.source,
             });
             break;
-            
+
           case 'store.disconnected':
             this.emit({
               type: 'disconnected',
@@ -128,7 +100,7 @@ export class BridgeClient {
             });
             this.subscribedStores.delete(msg.payload.storeId);
             break;
-            
+
           case 'store.registered':
             this.emit({
               type: 'connected',
@@ -139,17 +111,17 @@ export class BridgeClient {
             break;
         }
       }
-    } catch (err) {
-      console.error('[BridgeClient] Failed to handle message:', err);
+    } catch {
+      // Ignore malformed messages from unknown clients.
     }
   }
-  
+
   private emit(event: BridgeEvent): void {
     for (const handler of this.eventHandlers) {
       handler(event);
     }
   }
-  
+
   onEvent(handler: (event: BridgeEvent) => void): () => void {
     this.eventHandlers.add(handler);
     return () => this.eventHandlers.delete(handler);
@@ -173,7 +145,7 @@ export class BridgeClient {
       }, 5000);
     });
   }
-  
+
   async listStores(): Promise<StoreSummary[]> {
     return this.request<StoreSummary[]>('listStores', {});
   }
@@ -187,25 +159,44 @@ export class BridgeClient {
     const res = await this.request<StateSnapshot | null>('getState', { storeId });
     return res ?? undefined;
   }
-  
+
+  async findStoreByKey(pageId: string, storeKey: string): Promise<StoreSummary | undefined> {
+    const stores = await this.listStores();
+    return stores.find((store) => store.pageId === pageId && store.storeKey === storeKey);
+  }
+
+  async getStateByKey(pageId: string, storeKey = 'main'): Promise<StateSnapshot | undefined> {
+    const res = await this.request<StateSnapshot | null>('getState', { pageId, storeKey });
+    return res ?? undefined;
+  }
+
   subscribe(storeId: string): void {
     this.subscribedStores.add(storeId);
     this.send({ type: 'subscribe', payload: { storeId } });
   }
-  
+
   unsubscribe(storeId: string): void {
     this.subscribedStores.delete(storeId);
     this.send({ type: 'unsubscribe', payload: { storeId } });
   }
-  
-  async setState(storeId: string, state: unknown, options?: { expectedVersion?: number }): Promise<void> {
-    await this.request<null>('setState', { storeId, state, expectedVersion: options?.expectedVersion });
+
+  async setState(storeId: string, state: unknown, options?: SetStateOptions): Promise<void> {
+    await this.request<null>('setState', { storeId, state, ...options });
   }
-  
+
+  async setStateByKey(
+    pageId: string,
+    storeKey: string,
+    state: unknown,
+    options?: SetStateOptions
+  ): Promise<{ version: number }> {
+    return this.request<{ version: number }>('setState', { pageId, storeKey, state, ...options });
+  }
+
   async dispatch(storeId: string, action: { type: string; payload?: unknown }): Promise<void> {
     await this.request<null>('dispatch', { storeId, action });
   }
-  
+
   disconnect(): void {
     this.ws?.close();
   }
