@@ -1,0 +1,144 @@
+name: Bump Version and Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/**'
+      - '.github/workflows/bump-publish.yml'
+
+concurrency:
+  group: bump-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bump-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Get changed packages
+        id: changed
+        run: |
+          # Check which packages have changes since last tag
+          CHANGED_PACKAGES=""
+          
+          for pkg in packages/*; do
+            if [ -d "$pkg" ] && [ -f "$pkg/package.json" ]; then
+              PKG_NAME=$(basename "$pkg")
+              # Check if package has changes
+              if git diff --quiet HEAD~1 -- "$pkg" 2>/dev/null; then
+                echo "📦 $PKG_NAME: no changes"
+              else
+                echo "📦 $PKG_NAME: changed"
+                CHANGED_PACKAGES="$CHANGED_PACKAGES $PKG_NAME"
+              fi
+            fi
+          done
+          
+          echo "packages=$CHANGED_PACKAGES" >> $GITHUB_OUTPUT
+
+      - name: Bump versions
+        if: steps.changed.outputs.packages != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          BUMPED=""
+          for pkg in ${{ steps.changed.outputs.packages }}; do
+            cd "$GITHUB_WORKSPACE/packages/$pkg"
+            
+            CURRENT_VERSION=$(node -p "require('./package.json').version")
+            
+            # Parse version components
+            MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+            PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+            
+            # Bump patch version
+            NEW_PATCH=$((PATCH + 1))
+            NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+            
+            # Update package.json
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+              pkg.version = '$NEW_VERSION';
+              fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
+            "
+            
+            echo "🔼 $pkg: $CURRENT_VERSION → $NEW_VERSION"
+            BUMPED="$BUMPED $pkg@$NEW_VERSION"
+          done
+          
+          # Commit version bumps
+          if [ -n "$BUMPED" ]; then
+            cd "$GITHUB_WORKSPACE"
+            git add packages/*/package.json
+            git commit -m "chore(release): bump versions$BUMPED [skip ci]" || echo "No changes to commit"
+            git push
+          fi
+
+      - name: Install dependencies
+        if: steps.changed.outputs.packages != ''
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build packages
+        if: steps.changed.outputs.packages != ''
+        run: pnpm build
+
+      - name: Publish @agentstage/bridge
+        if: contains(steps.changed.outputs.packages, 'bridge')
+        working-directory: packages/bridge
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @agentstage/render
+        if: contains(steps.changed.outputs.packages, 'render')
+        working-directory: packages/render
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish agent-stage (CLI)
+        if: contains(steps.changed.outputs.packages, 'cli')
+        working-directory: packages/cli
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create Git Tag
+        if: steps.changed.outputs.packages != ''
+        run: |
+          CLI_VERSION=$(node -p "require('./packages/cli/package.json').version")
+          TAG="v$CLI_VERSION"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "🏷️ Tag $TAG already exists"
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+            echo "🏷️ Created and pushed tag $TAG"
+          fi

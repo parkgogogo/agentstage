@@ -1,0 +1,105 @@
+name: Publish to NPM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/**'
+      - '.github/workflows/publish.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Check and publish @agentstage/bridge
+        working-directory: packages/bridge
+        run: |
+          PACKAGE_NAME="@agentstage/bridge"
+          LOCAL_VERSION=$(node -p "require('./package.json').version")
+          NPM_VERSION=$(npm view $PACKAGE_NAME version 2>/dev/null || echo "0.0.0")
+          
+          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
+            echo "📦 Publishing $PACKAGE_NAME@$LOCAL_VERSION (npm: $NPM_VERSION)"
+            npm publish --access public --provenance
+          else
+            echo "⏭️ $PACKAGE_NAME@$LOCAL_VERSION already published"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Check and publish @agentstage/render
+        working-directory: packages/render
+        run: |
+          PACKAGE_NAME="@agentstage/render"
+          LOCAL_VERSION=$(node -p "require('./package.json').version")
+          NPM_VERSION=$(npm view $PACKAGE_NAME version 2>/dev/null || echo "0.0.0")
+          
+          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
+            echo "📦 Publishing $PACKAGE_NAME@$LOCAL_VERSION (npm: $NPM_VERSION)"
+            npm publish --access public --provenance
+          else
+            echo "⏭️ $PACKAGE_NAME@$LOCAL_VERSION already published"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Check and publish agent-stage (CLI)
+        working-directory: packages/cli
+        run: |
+          PACKAGE_NAME="agent-stage"
+          LOCAL_VERSION=$(node -p "require('./package.json').version")
+          NPM_VERSION=$(npm view $PACKAGE_NAME version 2>/dev/null || echo "0.0.0")
+          
+          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
+            echo "📦 Publishing $PACKAGE_NAME@$LOCAL_VERSION (npm: $NPM_VERSION)"
+            npm publish --access public --provenance
+          else
+            echo "⏭️ $PACKAGE_NAME@$LOCAL_VERSION already published"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create Git Tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          CLI_VERSION=$(node -p "require('./packages/cli/package.json').version")
+          TAG="v$CLI_VERSION"
+          
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "🏷️ Tag $TAG already exists"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+            echo "🏷️ Created and pushed tag $TAG"
+          fi
