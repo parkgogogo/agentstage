@@ -109,21 +109,21 @@ jobs:
       - name: Publish @agentstage/bridge
         if: contains(steps.changed.outputs.packages, 'bridge')
         working-directory: packages/bridge
-        run: npm publish --access public --provenance
+        run: pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @agentstage/render
         if: contains(steps.changed.outputs.packages, 'render')
         working-directory: packages/render
-        run: npm publish --access public --provenance
+        run: pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish agent-stage (CLI)
         if: contains(steps.changed.outputs.packages, 'cli')
         working-directory: packages/cli
-        run: npm publish --access public --provenance
+        run: pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
