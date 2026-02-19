@@ -1,0 +1,41 @@
+{
+  "name": "@agentstage/render",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./bridge-state-provider": {
+      "types": "./dist/bridge-state-provider.d.ts",
+      "default": "./dist/bridge-state-provider.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog.d.ts",
+      "default": "./dist/catalog.js"
+    },
+    "./json-to-tsx": {
+      "types": "./dist/json-to-tsx.d.ts",
+      "default": "./dist/json-to-tsx.js"
+    },
+    "./use-bridge-state": {
+      "types": "./dist/use-bridge-state.d.ts",
+      "default": "./dist/use-bridge-state.js"
+    }
+  },
+  "peerDependencies": {
+    "@json-render/core": "*",
+    "@json-render/react": "*",
+    "react": ">=18",
+    "zod": "^3.22.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

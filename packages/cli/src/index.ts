@@ -7,22 +7,6 @@ import { devCommand } from './commands/dev/index.js';
 import { pageCommand } from './commands/page/index.js';
 import { runCommand } from './commands/run/index.js';
 
-// Legacy commands (for backwards compatibility)
-import { initCommand } from './commands/init.js';
-import { startCommand } from './commands/start.js';
-import { stopCommand } from './commands/stop.js';
-import { restartCommand } from './commands/restart.js';
-import { statusCommand } from './commands/status.js';
-import { lsCommand } from './commands/ls.js';
-import { inspectCommand } from './commands/inspect.js';
-import { watchCommand } from './commands/watch.js';
-import { execCommand } from './commands/exec.js';
-import { addPageCommand } from './commands/add-page.js';
-import { rmPageCommand } from './commands/rm-page.js';
-import { doctorCommand } from './commands/doctor.js';
-import { cleanupCommand } from './commands/cleanup.js';
-import { verifyCommand } from './commands/verify.js';
-
 const program = new Command();
 
 program
@@ -34,22 +18,6 @@ program
 program.addCommand(devCommand);
 program.addCommand(pageCommand);
 program.addCommand(runCommand);
-
-// Legacy commands (hidden from help but still work)
-program.addCommand(initCommand);
-program.addCommand(startCommand);
-program.addCommand(stopCommand);
-program.addCommand(restartCommand);
-program.addCommand(statusCommand);
-program.addCommand(lsCommand);
-program.addCommand(inspectCommand);
-program.addCommand(watchCommand);
-program.addCommand(execCommand);
-program.addCommand(addPageCommand);
-program.addCommand(rmPageCommand);
-program.addCommand(doctorCommand);
-program.addCommand(cleanupCommand);
-program.addCommand(verifyCommand);
 
 // Error handling
 program.exitOverride();
