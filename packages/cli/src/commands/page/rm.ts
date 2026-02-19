@@ -22,6 +22,7 @@ export const pageRmCommand = new Command('rm')
     const pageDir = join(workspaceDir, 'src', 'pages', name);
     const uiFile = join(pageDir, 'ui.json');
     const storeFile = join(pageDir, 'store.json');
+    const promptFile = join(pageDir, 'prompt.md');
     const typeFile = join(workspaceDir, '.agentstage', 'types', `${name}.d.ts`);
 
     if (!existsSync(pageFile)) {
@@ -57,6 +58,12 @@ export const pageRmCommand = new Command('rm')
       if (existsSync(storeFile)) {
         await unlink(storeFile);
         console.log(`  Removed: ${c.gray(`src/pages/${name}/store.json`)}`);
+      }
+
+      // Remove prompt file if exists
+      if (existsSync(promptFile)) {
+        await unlink(promptFile);
+        console.log(`  Removed: ${c.gray(`src/pages/${name}/prompt.md`)}`);
       }
 
       // Try to remove page directory (if empty)
