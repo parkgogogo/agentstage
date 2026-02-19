@@ -1,61 +1,53 @@
-import { useState, useEffect } from 'react'
 import { createBridgeStore } from 'agent-stage-bridge/browser'
 import { z } from 'zod'
+import type { ZodSchema } from 'zod'
 
-const schema = z.object({
-  count: z.number(),
-})
+export interface Bridge {
+  store: {
+    getState: () => Record<string, unknown>
+    subscribe: (callback: (state: Record<string, unknown>) => void) => () => void
+    setState: (updater: (prev: Record<string, unknown>) => Record<string, unknown>) => void
+  }
+  connect: () => Promise<{ storeId: string }>
+  isHydrated: boolean
+  pageId: string
+}
 
-export const bridge = createBridgeStore({
+interface CreatePageBridgeOptions {
+  pageId: string
+  schema?: ZodSchema
+  actions?: Record<string, { description: string; payload?: ZodSchema }>
+  events?: Record<string, { description: string }>
+}
+
+// Default schema that accepts any object
+const defaultSchema = z.record(z.unknown())
+
+export function createPageBridge(options: CreatePageBridgeOptions): Bridge {
+  const { pageId, schema = defaultSchema, actions = {}, events = {} } = options
+
+  const bridge = createBridgeStore({
+    pageId,
+    storeKey: 'main',
+    description: {
+      schema,
+      actions,
+      events,
+    },
+    createState: () => ({
+      // Initial state will be loaded from store.json by gateway
+    }),
+  })
+
+  // Mount to window for debugging
+  if (typeof window !== 'undefined') {
+    ;(window as unknown as Record<string, unknown>)[`bridge_${pageId}`] = bridge
+  }
+
+  return bridge as unknown as Bridge
+}
+
+// Legacy export for compatibility
+export const bridge = createPageBridge({
   pageId: 'counter',
-  storeKey: 'main',
-  description: {
-    schema,
-    actions: {
-      setCount: {
-        description: 'Set the counter value',
-        payload: z.object({ value: z.number() }),
-      },
-    },
-    events: {
-      reset: {
-        description: 'Reset counter to 0',
-      },
-    },
-  },
-  createState: (set, get) => ({
-    count: 0,
-    dispatch: (action: { type: string; payload?: unknown }) => {
-      switch (action.type) {
-        case 'setCount':
-          set({ count: (action.payload as { value: number }).value })
-          break
-        case 'reset':
-          set({ count: 0 })
-          break
-      }
-    },
-  }),
 })
-
-// Mount to window for debugging
-if (typeof window !== 'undefined') {
-  (window as any).bridge = bridge
-}
-
-// Hook for React components
-export function useBridgeStore<T>(
-  bridgeInstance: typeof bridge,
-  selector: (state: { count: number }) => T
-): T {
-  const [value, setValue] = useState(selector(bridgeInstance.store.getState()))
-
-  useEffect(() => {
-    const unsubscribe = bridgeInstance.store.subscribe((state) => {
-      setValue(selector(state))
-    })
-    return unsubscribe
-  }, [bridgeInstance, selector])
-
-  return value
-}

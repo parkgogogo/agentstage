@@ -10,13 +10,14 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@agentstage/render": "workspace:*",
     "@tanstack/react-router": "^1.114.3",
     "@tanstack/router-core": "^1.114.3",
     "@tanstack/router-devtools": "^1.114.3",
     "agent-stage-bridge": "workspace:*",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
-    "lucide-react": "^0.300.0",
+    "lucide-react": "^0.564.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwind-merge": "^2.2.0",

@@ -37,6 +37,7 @@ export {
   useIsVisible,
   useStateValue,
   useStateBinding,
+  schema,
 } from '@json-render/react';
 
 export type {

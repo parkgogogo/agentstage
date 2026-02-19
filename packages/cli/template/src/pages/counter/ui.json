@@ -1,0 +1,108 @@
+{
+  "root": "container",
+  "elements": {
+    "container": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md",
+        "align": "center"
+      },
+      "children": ["header", "card"]
+    },
+    "header": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "sm",
+        "align": "center"
+      },
+      "children": ["title", "description"]
+    },
+    "title": {
+      "type": "Heading",
+      "props": {
+        "text": "File-based Store Demo",
+        "level": "h1"
+      }
+    },
+    "description": {
+      "type": "Text",
+      "props": {
+        "text": "This page demonstrates the JSON-render architecture. State is persisted to store.json and synced via bridge.",
+        "variant": "muted"
+      }
+    },
+    "card": {
+      "type": "Card",
+      "props": {
+        "title": "Counter",
+        "description": "Try modifying store.json or use CLI to update state"
+      },
+      "children": ["counter-content"]
+    },
+    "counter-content": {
+      "type": "Stack",
+      "props": {
+        "direction": "vertical",
+        "gap": "md",
+        "align": "center"
+      },
+      "children": ["count-display", "buttons", "hint"]
+    },
+    "count-display": {
+      "type": "Text",
+      "props": {
+        "text": { "$state": "/count" },
+        "variant": "lead"
+      }
+    },
+    "buttons": {
+      "type": "Stack",
+      "props": {
+        "direction": "horizontal",
+        "gap": "sm"
+      },
+      "children": ["btn-decrement", "btn-increment"]
+    },
+    "btn-decrement": {
+      "type": "Button",
+      "props": {
+        "label": "-",
+        "variant": "secondary"
+      },
+      "on": {
+        "press": {
+          "action": "setState",
+          "params": {
+            "statePath": "/count",
+            "value": -1
+          }
+        }
+      }
+    },
+    "btn-increment": {
+      "type": "Button",
+      "props": {
+        "label": "+",
+        "variant": "primary"
+      },
+      "on": {
+        "press": {
+          "action": "setState",
+          "params": {
+            "statePath": "/count",
+            "value": 1
+          }
+        }
+      }
+    },
+    "hint": {
+      "type": "Text",
+      "props": {
+        "text": "State is saved to pages/counter/store.json. Try refreshing or editing the file!",
+        "variant": "caption"
+      }
+    }
+  }
+}
