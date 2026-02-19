@@ -51,21 +51,28 @@ export const pageAddCommand = new Command('add')
       await writeFile(join(pagesDir, 'ui.json'), JSON.stringify(uiContent, null, 2));
       await writeFile(join(pagesDir, 'store.json'), JSON.stringify(storeContent, null, 2));
 
-      // 生成 AI prompt 文件
-      const promptContent = generatePromptContent(name);
-      await writeFile(join(pagesDir, 'prompt.md'), promptContent);
-
       consola.success(`Page "${name}" created`);
       console.log(`  Route:    ${c.cyan(`src/routes/${name}.tsx`)}`);
       console.log(`  UI:       ${c.cyan(`src/pages/${name}/ui.json`)}`);
       console.log(`  Store:    ${c.cyan(`src/pages/${name}/store.json`)}`);
-      console.log(`  Prompt:   ${c.cyan(`src/pages/${name}/prompt.md`)}`);
       const port = config?.port || 3000;
       console.log(`  URL:      ${c.cyan(`http://localhost:${port}/${name}`)}`);
       console.log();
+
+      // 输出 AI Prompts
+      console.log(c.bold('─'.repeat(60)));
+      console.log(c.bold('🤖 AI Prompts for generating UI'));
+      console.log(c.bold('─'.repeat(60)));
+      console.log();
+      console.log(c.dim('Copy the following and send to your AI:'));
+      console.log();
+      console.log(generatePromptContent(name));
+      console.log(c.bold('─'.repeat(60)));
+      console.log();
+
       console.log(c.dim('Next steps:'));
-      console.log(`  1. Edit ${c.cyan(`src/pages/${name}/ui.json`)} to customize UI`);
-      console.log(`  2. Or use ${c.cyan(`src/pages/${name}/prompt.md`)} to guide AI generation`);
+      console.log(`  1. Send the prompts above to AI to generate UI`);
+      console.log(`  2. Save AI output to ${c.cyan(`src/pages/${name}/ui.json`)}`);
       console.log(`  3. Visit ${c.cyan(`http://localhost:${port}/${name}`)} to see the page`);
       console.log(`  4. Use ${c.cyan(`agentstage run set-state ${name} '{...}' --live`)} to update state`);
 
