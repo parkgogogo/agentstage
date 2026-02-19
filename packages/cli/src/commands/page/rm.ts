@@ -6,6 +6,7 @@ import { unlink, rmdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, resolve } from 'pathe';
 import { getWorkspaceDir, isInitialized } from '../../utils/paths.js';
+import { printAgentErrorHelp, printAgentSuccess } from '../../utils/agent-helper.js';
 
 // 安全验证：页面名称只允许字母、数字、连字符
 const PAGE_NAME_PATTERN = /^[a-z0-9-]+$/;
@@ -16,13 +17,13 @@ export const pageRmCommand = new Command('rm')
   .option('-f, --force', 'Skip confirmation', false)
   .action(async (name, options) => {
     if (!isInitialized()) {
-      consola.error('Project not initialized. Please run `agentstage init` first.');
+      printAgentErrorHelp('Project not initialized');
       process.exit(1);
     }
 
     // 安全验证：严格检查页面名称
     if (!PAGE_NAME_PATTERN.test(name)) {
-      consola.error('Invalid page name. Only lowercase letters, numbers, and hyphens are allowed.');
+      printAgentErrorHelp('Page name contains invalid characters');
       process.exit(1);
     }
 
@@ -93,10 +94,10 @@ export const pageRmCommand = new Command('rm')
         console.log(`  Removed: ${c.gray(`.agentstage/types/${name}.d.ts`)}`);
       }
 
-      consola.success(`Page "${name}" removed`);
+      printAgentSuccess(`Page "${name}" removed`);
 
     } catch (error: any) {
-      consola.error('Failed to remove page:', error.message);
+      printAgentErrorHelp('Failed to remove page', error.message);
       process.exit(1);
     }
   });

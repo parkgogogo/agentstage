@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 import { join } from 'pathe';
 import { getWorkspaceDir, isInitialized, readRuntimeConfig, getPagesDir } from '../../utils/paths.js';
 import { FileStore } from 'agent-stage-bridge';
+import { printAgentErrorHelp, printAgentSuccess, printAgentHint } from '../../utils/agent-helper.js';
 
 // 从 stdin 读取数据
 async function readStdin(): Promise<string> {
@@ -26,12 +27,12 @@ export const pageAddCommand = new Command('add')
   .action(async (name, options) => {
     // 检查是否已初始化
     if (!isInitialized()) {
-      consola.error('Project not initialized. Please run `agentstage init` first.');
+      printAgentErrorHelp('Project not initialized');
       process.exit(1);
     }
 
     if (!/^[a-z0-9-]+$/.test(name)) {
-      consola.error('Page name must be lowercase letters, numbers, and hyphens');
+      printAgentErrorHelp('Page name contains invalid characters');
       process.exit(1);
     }
 
@@ -47,7 +48,7 @@ export const pageAddCommand = new Command('add')
       await mkdir(pagesDir, { recursive: true });
 
       if (existsSync(pageFile)) {
-        consola.error(`Page "${name}" already exists at src/routes/${name}.tsx`);
+        printAgentErrorHelp(`Page "${name}" already exists`);
         process.exit(1);
       }
 
@@ -63,14 +64,14 @@ export const pageAddCommand = new Command('add')
         try {
           uiContent = JSON.parse(input);
         } catch {
-          consola.error('Invalid UI JSON from stdin');
+          printAgentErrorHelp('Invalid UI JSON from stdin', 'Make sure your stdin contains valid JSON');
           process.exit(1);
         }
       } else if (options.ui) {
         try {
           uiContent = JSON.parse(options.ui);
         } catch {
-          consola.error('Invalid UI JSON provided');
+          printAgentErrorHelp('Invalid UI JSON format');
           process.exit(1);
         }
       } else {
@@ -89,7 +90,7 @@ export const pageAddCommand = new Command('add')
           stateContent = { state: JSON.parse(input) };
           hasCustomState = true;
         } catch {
-          consola.error('Invalid state JSON from stdin');
+          printAgentErrorHelp('Invalid state JSON from stdin');
           process.exit(1);
         }
       } else if (options.state) {
@@ -97,7 +98,7 @@ export const pageAddCommand = new Command('add')
           stateContent = { state: JSON.parse(options.state) };
           hasCustomState = true;
         } catch {
-          consola.error('Invalid state JSON provided');
+          printAgentErrorHelp('Invalid state JSON format');
           process.exit(1);
         }
       } else {
@@ -119,22 +120,26 @@ export const pageAddCommand = new Command('add')
         await writeFile(join(pagesDir, 'store.json'), JSON.stringify(stateContent, null, 2));
       }
 
-      const port = config?.port || 3000;
-
       // 输出结果
-      consola.success(`Page "${name}" created`);
-      console.log(`  Route: ${c.cyan(`src/routes/${name}.tsx`)}`);
-      console.log(`  UI:    ${c.cyan(`src/pages/${name}/ui.json`)}`);
-      console.log(`  Store: ${c.cyan(`src/pages/${name}/store.json`)}`);
-      console.log(`  URL:   ${c.cyan(`http://localhost:${port}/${name}`)}`);
-
-      // 如果提供了完整数据，显示简洁提示
+      const port = config?.port || 3000;
+      
       if (options.ui) {
-        console.log();
-        console.log(c.green('✓ UI and state provided - page is ready!'));
-        console.log(c.dim(`  Visit http://localhost:${port}/${name} to see your page`));
+        // 提供了完整 UI
+        printAgentSuccess(
+          `Page "${name}" created with custom UI and state`,
+          [
+            `Start dev server: agentstage dev start`,
+            `Open http://localhost:${port}/${name} to see your page`,
+            `Update state: agentstage run set-state ${name} '{"key": "value"}'`
+          ]
+        );
       } else {
-        // 没有提供 UI，输出 prompts
+        // 默认 UI，输出 prompts
+        consola.success(`Page "${name}" created`);
+        console.log(`  Route: ${c.cyan(`src/routes/${name}.tsx`)}`);
+        console.log(`  UI:    ${c.cyan(`src/pages/${name}/ui.json`)}`);
+        console.log(`  Store: ${c.cyan(`src/pages/${name}/store.json`)}`);
+        console.log(`  URL:   ${c.cyan(`http://localhost:${port}/${name}`)}`);
         console.log();
         console.log(c.bold('─'.repeat(60)));
         console.log(c.bold('🤖 AI Prompts'));
@@ -145,12 +150,11 @@ export const pageAddCommand = new Command('add')
         console.log(generatePromptContent(name));
         console.log(c.bold('─'.repeat(60)));
         console.log();
-        console.log(c.dim('Or provide UI directly:'));
-        console.log(`  agentstage page add ${name} --ui '{...}' --state '{...}'`);
+        printAgentHint(`Or provide UI directly: agentstage page add ${name} --ui '{...}' --state '{...}'`);
       }
 
     } catch (error: any) {
-      consola.error('Failed to create page:', error.message);
+      printAgentErrorHelp('Failed to create page', error.message);
       process.exit(1);
     }
   });
