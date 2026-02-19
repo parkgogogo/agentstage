@@ -19,9 +19,11 @@ function getTemplateDir(): string {
   const currentDir = dirname(currentFilePath);
 
   // Production: template is next to dist
-  const prodPath = join(currentDir, '..', '..', '..', '..', 'template');
+  // From dist/commands/dev/init.js -> dist/ -> package root
+  const prodPath = join(currentDir, '..', '..', '..', 'template');
   // Development: template is in the source
-  const devPath = join(currentDir, '..', '..', '..', '..', '..', 'template');
+  // From packages/cli/src/commands/dev/init.ts -> packages/cli/
+  const devPath = join(currentDir, '..', '..', '..', '..', 'template');
 
   if (existsSync(prodPath)) {
     return prodPath;
@@ -216,8 +218,9 @@ async function configurePackageJson(targetDir: string): Promise<void> {
   // Replace workspace:* with actual version or local path
   // In dev mode (monorepo), use file: protocol to reference the local bridge package
   // Check if we're in the monorepo by looking for packages/bridge from the CLI location
+  // From packages/cli/src/commands/dev/init.ts -> packages/cli/src/ -> packages/cli/ -> packages/
   const currentFilePath = fileURLToPath(import.meta.url);
-  const localBridgePath = resolve(join(dirname(currentFilePath), '..', '..', '..', '..', '..', 'bridge'));
+  const localBridgePath = resolve(join(dirname(currentFilePath), '..', '..', '..', '..', 'bridge'));
   const isDev = existsSync(localBridgePath);
 
   if (isDev) {
@@ -234,8 +237,9 @@ async function configurePackageJson(targetDir: string): Promise<void> {
 
 async function installDependencies(targetDir: string): Promise<void> {
   // Check if we're in the monorepo by looking for packages/bridge from the CLI location
+  // From packages/cli/src/commands/dev/init.ts -> packages/cli/src/ -> packages/cli/ -> packages/
   const currentFilePath = fileURLToPath(import.meta.url);
-  const localBridgePath = resolve(join(dirname(currentFilePath), '..', '..', '..', '..', '..', 'bridge'));
+  const localBridgePath = resolve(join(dirname(currentFilePath), '..', '..', '..', '..', 'bridge'));
   const isDev = existsSync(localBridgePath);
 
   if (isDev) {
