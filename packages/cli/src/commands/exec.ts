@@ -1,10 +1,9 @@
 import { Command } from 'commander';
 import consola from 'consola';
-import { homedir } from 'os';
 import { join } from 'pathe';
 import { FileStore } from 'agent-stage-bridge';
 import { BridgeClient } from 'agent-stage-bridge/sdk';
-import { isInitialized, readRuntimeConfig } from '../utils/paths.js';
+import { isInitialized, readRuntimeConfig, getPagesDir } from '../utils/paths.js';
 
 export const execCommand = new Command('exec')
   .description('Execute an action on a page or set state')
@@ -20,7 +19,7 @@ export const execCommand = new Command('exec')
         process.exit(1);
       }
 
-      const pagesDir = join(homedir(), '.agentstage', 'webapp', 'pages');
+      const pagesDir = await getPagesDir();
       const fileStore = new FileStore({ pagesDir });
       const storePath = join(pagesDir, pageId, 'store.json');
 

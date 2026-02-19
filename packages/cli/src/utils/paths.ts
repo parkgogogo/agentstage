@@ -58,26 +58,22 @@ export async function getPidFile(): Promise<string> {
 }
 
 /**
- * 获取 pages 目录
+ * 获取 pages 目录（用于文件存储）
  */
 export async function getPagesDir(): Promise<string> {
   const workspace = await getWorkspaceDir();
 
-  // Vite template structure
+  // New Vite template structure (src/routes for TanStack Router)
+  if (existsSync(join(workspace, 'src', 'routes'))) {
+    return join(workspace, 'src', 'pages');
+  }
+
+  // Legacy Vite template structure
   if (existsSync(join(workspace, 'src', 'pages'))) {
     return join(workspace, 'src', 'pages');
   }
 
-  // Legacy TanStack Start structure (for backwards compatibility)
-  if (existsSync(join(workspace, 'src', 'routes', 'pages'))) {
-    return join(workspace, 'src', 'routes', 'pages');
-  }
-
-  if (existsSync(join(workspace, 'app', 'routes', 'pages'))) {
-    return join(workspace, 'app', 'routes', 'pages');
-  }
-
-  throw new Error('Pages directory not found at src/pages');
+  throw new Error('Routes directory not found at src/routes');
 }
 
 // 运行时配置文件路径
@@ -91,6 +87,7 @@ export interface RuntimeConfig {
   pid: number;
   port: number;
   startedAt: string;
+  tunnelUrl?: string;
 }
 
 /**

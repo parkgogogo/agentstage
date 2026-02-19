@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import consola from 'consola';
+
+// New command structure
+import { devCommand } from './commands/dev/index.js';
+import { pageCommand } from './commands/page/index.js';
+import { runCommand } from './commands/run/index.js';
+
+// Legacy commands (for backwards compatibility)
 import { initCommand } from './commands/init.js';
 import { startCommand } from './commands/start.js';
 import { stopCommand } from './commands/stop.js';
@@ -12,7 +19,6 @@ import { watchCommand } from './commands/watch.js';
 import { execCommand } from './commands/exec.js';
 import { addPageCommand } from './commands/add-page.js';
 import { rmPageCommand } from './commands/rm-page.js';
-import { componentsCommand } from './commands/components.js';
 import { doctorCommand } from './commands/doctor.js';
 import { cleanupCommand } from './commands/cleanup.js';
 import { verifyCommand } from './commands/verify.js';
@@ -24,7 +30,12 @@ program
   .description('Agent UI Stage CLI - Create interactive UI for AI agents')
   .version('0.2.0');
 
-// 注册命令
+// New command structure
+program.addCommand(devCommand);
+program.addCommand(pageCommand);
+program.addCommand(runCommand);
+
+// Legacy commands (hidden from help but still work)
 program.addCommand(initCommand);
 program.addCommand(startCommand);
 program.addCommand(stopCommand);
@@ -36,12 +47,11 @@ program.addCommand(watchCommand);
 program.addCommand(execCommand);
 program.addCommand(addPageCommand);
 program.addCommand(rmPageCommand);
-program.addCommand(componentsCommand);
 program.addCommand(doctorCommand);
 program.addCommand(cleanupCommand);
 program.addCommand(verifyCommand);
 
-// 错误处理
+// Error handling
 program.exitOverride();
 
 try {
