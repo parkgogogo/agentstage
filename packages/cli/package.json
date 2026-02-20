@@ -1,6 +1,6 @@
 {
   "name": "agent-stage",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "files": [
     "dist",
     "template"
@@ -12,7 +12,8 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "rimraf dist && tsc -p tsconfig.build.json",
-    "typecheck": "pnpm -C ../bridge build && tsc -p tsconfig.json --noEmit"
+    "typecheck": "pnpm -C ../bridge build && tsc -p tsconfig.json --noEmit",
+    "test:e2e": "bash e2e/run-e2e.sh"
   },
   "dependencies": {
     "@agentstage/bridge": "workspace:*",

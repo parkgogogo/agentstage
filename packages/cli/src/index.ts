@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import consola from 'consola';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'pathe';
 
-// CLI entry point - auto-publish test
+// Read version from package.json
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+
 import { devCommand } from './commands/dev/index.js';
 import { pageCommand } from './commands/page/index.js';
 import { runCommand } from './commands/run/index.js';
@@ -13,7 +19,7 @@ const program = new Command();
 program
   .name('agentstage')
   .description('Agent UI Stage CLI - Create interactive UI for AI agents')
-  .version('0.2.0');
+  .version(pkg.version);
 
 // New command structure
 program.addCommand(devCommand);

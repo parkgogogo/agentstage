@@ -215,21 +215,18 @@ async function configurePackageJson(targetDir: string): Promise<void> {
   const packageJsonPath = join(targetDir, 'package.json');
   const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
-  // Replace workspace:* with actual version or local path
-  // In dev mode (monorepo), use file: protocol to reference the local bridge package
-  // Check if we're in the monorepo by looking for packages/bridge from the CLI location
-  // From packages/cli/src/commands/dev/init.ts -> packages/cli/src/ -> packages/cli/ -> packages/
-  const currentFilePath = fileURLToPath(import.meta.url);
-  const localBridgePath = resolve(join(dirname(currentFilePath), '..', '..', '..', '..', 'bridge'));
-  const isDev = existsSync(localBridgePath);
+  // Replace all workspace:* dependencies with actual npm versions
+  // This fixes the EUNSUPPORTEDPROTOCOL error when users run npm install
+  const npmVersions: Record<string, string> = {
+    '@agentstage/render': '^0.2.2',
+    '@agentstage/bridge': '^0.1.0',
+    'agent-stage-bridge': '^0.1.0'
+  };
 
-  if (isDev) {
-    // In dev mode, use file: protocol to reference the local bridge package
-    // This works with both npm and pnpm
-    packageJson.dependencies['@agentstage/bridge'] = `file:${localBridgePath}`;
-  } else {
-    // Use npm version for production
-    packageJson.dependencies['@agentstage/bridge'] = '^0.1.0';
+  for (const [dep, version] of Object.entries(npmVersions)) {
+    if (packageJson.dependencies?.[dep] === 'workspace:*') {
+      packageJson.dependencies[dep] = version;
+    }
   }
 
   await writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
