@@ -16,17 +16,7 @@ import { guideCommand } from './commands/guide.js';
 import { cleanupCommand } from './commands/cleanup.js';
 import { componentsCommand } from './commands/components.js';
 import { doctorCommand } from './commands/doctor.js';
-import { execCommand } from './commands/exec.js';
-import { initCommand } from './commands/init.js';
-import { inspectCommand } from './commands/inspect.js';
-import { lsCommand } from './commands/ls.js';
-import { restartCommand } from './commands/restart.js';
-import { rmPageCommand } from './commands/rm-page.js';
-import { startCommand } from './commands/start.js';
-import { statusCommand } from './commands/status.js';
-import { stopCommand } from './commands/stop.js';
 import { verifyCommand } from './commands/verify.js';
-import { watchCommand } from './commands/watch.js';
 
 const program = new Command();
 
@@ -35,25 +25,15 @@ program
   .description('Agent UI Stage CLI - Create interactive UI for AI agents')
   .version(pkg.version);
 
-// Register all commands
-program.addCommand(devCommand);
-program.addCommand(pageCommand);
-program.addCommand(runCommand);
-program.addCommand(guideCommand);
-program.addCommand(cleanupCommand);
-program.addCommand(componentsCommand);
-program.addCommand(doctorCommand);
-program.addCommand(execCommand);
-program.addCommand(initCommand);
-program.addCommand(inspectCommand);
-program.addCommand(lsCommand);
-program.addCommand(restartCommand);
-program.addCommand(rmPageCommand);
-program.addCommand(startCommand);
-program.addCommand(statusCommand);
-program.addCommand(stopCommand);
-program.addCommand(verifyCommand);
-program.addCommand(watchCommand);
+// Register commands
+program.addCommand(devCommand);      // dev init/start/stop/status
+program.addCommand(pageCommand);     // page add/rm/ls/manifest
+program.addCommand(runCommand);      // run get-state/set-state/exec/inspect/watch
+program.addCommand(guideCommand);    // guide
+program.addCommand(cleanupCommand);  // cleanup
+program.addCommand(componentsCommand); // components
+program.addCommand(doctorCommand);   // doctor
+program.addCommand(verifyCommand);   // verify
 
 // Error handling
 program.exitOverride();
