@@ -13,6 +13,7 @@ import { devCommand } from './commands/dev/index.js';
 import { pageCommand } from './commands/page/index.js';
 import { runCommand } from './commands/run/index.js';
 import { guideCommand } from './commands/guide.js';
+import { cleanupCommand } from './commands/cleanup.js';
 
 const program = new Command();
 
@@ -26,6 +27,7 @@ program.addCommand(devCommand);
 program.addCommand(pageCommand);
 program.addCommand(runCommand);
 program.addCommand(guideCommand);
+program.addCommand(cleanupCommand);
 
 // Error handling
 program.exitOverride();
